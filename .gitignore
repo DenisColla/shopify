@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+# Mai committare dati reali o chiavi
+.env
+*.local.*
+dati-reali/
