@@ -101,10 +101,17 @@ export function fogliFinti() {
   };
 }
 
-export const SERVIZI_BASE = {
-  LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
-  Session: { getScriptTimeZone: () => 'Europe/Rome', getEffectiveUser: () => ({ getEmail: () => 'operatore@example.com' }) }
-};
+const lockFinto = () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} });
+
+/** Servizi di base; "casella" = account su cui gira lo script. */
+export function serviziBase(casella = 'operatore@example.com') {
+  return {
+    LockService: { getScriptLock: lockFinto, getUserLock: lockFinto },
+    Session: { getScriptTimeZone: () => 'Europe/Rome', getEffectiveUser: () => ({ getEmail: () => casella }) }
+  };
+}
+
+export const SERVIZI_BASE = serviziBase();
 
 export const PROPRIETA_BASE = {
   ANTHROPIC_API_KEY: 'chiave-finta',
@@ -145,7 +152,10 @@ export function shopifyFinto(opzioni = {}) {
     if (erroreUnaVolta) delete errori[nome];
     const ue = erroreUnaVolta || [];
     switch (nome) {
-      case 'CercaClienti': return { codice: 200, corpo: { data: { customers: { nodes: opzioni.clienti || [] } } } };
+      case 'CercaClienti': {
+        const clienti = typeof opzioni.clienti === 'function' ? opzioni.clienti(operazioni) : opzioni.clienti || [];
+        return { codice: 200, corpo: { data: { customers: { nodes: clienti } } } };
+      }
       case 'CreaCliente': return { codice: 200, corpo: { data: { customerCreate: { customer: ue.length ? null : { id: 'gid://shopify/Customer/777' }, userErrors: ue } } } };
       case 'AggiornaCliente': return { codice: 200, corpo: { data: { customerUpdate: { customer: { id: variables.input.id }, userErrors: ue } } } };
       case 'CreaIndirizzo': return { codice: 200, corpo: { data: { customerAddressCreate: { address: ue.length ? null : { id: 'gid://shopify/MailingAddress/' + operazioni.length }, userErrors: ue } } } };

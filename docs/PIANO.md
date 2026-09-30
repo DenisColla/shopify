@@ -85,9 +85,27 @@ soglia più bassa che dà almeno il 98% di campi corretti. Si cambia dal Foglio 
 Claude API: circa 10-20 euro al mese a regime, più circa 15-25 euro una volta sola per il collaudo sullo storico.
 Google Apps Script e Shopify API: nessun costo aggiuntivo.
 
-## 9. Possibili sviluppi (non inclusi)
+## 9. Estensione a più caselle (30/09/2026)
+
+Richiesta di Denis: il sistema deve lavorare anche sulle caselle dei colleghi (Silvia, Marco), tutte nella stessa
+organizzazione Google Workspace.
+
+- **Un solo Foglio con lo script**, condiviso con i colleghi; ognuno attiva il controllo sulla propria casella dal
+  menu. Il trigger gira con l'account di chi lo attiva, quindi legge la sua casella (niente deleghe di dominio né
+  account di servizio).
+- Memoria **per casella** (proprietà utente): ultimo controllo, messaggi già elaborati.
+- Memoria **condivisa** (proprietà dello script): stato dei pazienti (con i dati parziali quando mancano residenza o
+  spedizione), caselle attive e ora dell'ultimo giro.
+- Scrittura su Shopify sotto un **blocco condiviso** tra le caselle; se il cliente risulta creato nel frattempo
+  ("email già usata") si rilegge e si completa invece di duplicare.
+- **Registro unico** con la colonna "Casella".
+- Filtro: un paziente che risponde a una mail di un collega (citazione di un indirizzo Migelino nel testo) è
+  considerato "in contatto" anche se da quella casella non gli si è mai scritto.
+- Il collaudo sullo storico si avvia dall'account che inoltra le conferme all'ufficio ordini.
+
+## 10. Possibili sviluppi (non inclusi)
 
 - Bozza di risposta al paziente per chiedere il dato mancante (senza invio automatico).
 - Creazione della bozza d'ordine su Shopify.
-- Estensione ad altre caselle (es. quella di un collega) o ai documenti ricevuti su WhatsApp.
+- Estensione ai documenti ricevuti su WhatsApp.
 - Conversione automatica delle foto iPhone in formato HEIC (oggi segnalate come non leggibili).

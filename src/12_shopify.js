@@ -21,10 +21,11 @@ var Shopify = (function () {
   var M_ELIMINA = 'mutation EliminaCliente($input: CustomerDeleteInput!) { customerDelete(input: $input) { deletedCustomerId userErrors { field message } } }';
   var Q_NEGOZIO = 'query Negozio { shop { name myshopifyDomain } }';
 
-  function ErroreShopify(messaggio, dettagli) {
+  function ErroreShopify(messaggio, dettagli, codice) {
     this.name = 'ErroreShopify';
     this.message = messaggio;
     this.dettagli = dettagli || [];
+    this.codice = codice || '';
   }
   ErroreShopify.prototype = Object.create(Error.prototype);
 
@@ -127,9 +128,19 @@ var Shopify = (function () {
     });
   }
 
+  function emailGiaUsata(errori) {
+    return errori.some(function (e) {
+      return /email/i.test(String(e.field || '')) && /taken|already|già/i.test(e.message || '');
+    });
+  }
+
   function creaCliente(input, avvisi) {
     var d = graphql(M_CREA_CLIENTE, { input: input }).customerCreate;
     var errori = erroriUtente(d);
+    if (errori.length && emailGiaUsata(errori)) {
+      // creato nel frattempo (a mano o da un'altra casella): chi chiama rilegge il cliente e completa
+      throw new ErroreShopify('Cliente già esistente con questa email', errori.map(function (e) { return e.message; }), 'EMAIL_ESISTENTE');
+    }
     if (errori.length && input.phone && telefonoGiaUsato(errori)) {
       avvisi.push('Telefono ' + input.phone + ' già usato da un altro cliente: creato senza telefono');
       var senza = JSON.parse(JSON.stringify(input));

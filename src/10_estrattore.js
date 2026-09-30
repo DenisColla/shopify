@@ -188,5 +188,69 @@ var Estrattore = (function () {
     return r.dati;
   }
 
-  return { estrai: estrai, contenuti: contenuti, SCHEMA: SCHEMA, SISTEMA: SISTEMA, FONTI: FONTI };
+  var CAMPI_SEMPLICI = ['nome', 'cognome', 'sesso', 'data_nascita', 'luogo_nascita', 'codice_fiscale', 'telefono'];
+
+  function pieno(c) {
+    return !!(c && String(c.valore || '').trim());
+  }
+
+  function indirizzoPieno(x) {
+    return !!(x && (String(x.via || '') + String(x.cap || '') + String(x.comune || '')).trim());
+  }
+
+  function piuAffidabile(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return (Number(b.confidenza) || 0) > (Number(a.confidenza) || 0) ? b : a;
+  }
+
+  /**
+   * Unisce l'estrazione salvata quando mancavano dei dati con quella nuova: per ogni
+   * campo tiene il valore letto con più sicurezza. Serve quando il paziente manda i
+   * documenti in un momento (o a una casella) e l'indirizzo in un altro.
+   * Se nome o cognome sono in contrasto (es. un familiare) non unisce nulla.
+   */
+  function unisci(precedente, nuova) {
+    if (!precedente) return nuova;
+    var diversi = ['nome', 'cognome'].some(function (k) {
+      return pieno(precedente[k]) && pieno(nuova[k]) && Testo.chiave(precedente[k].valore) !== Testo.chiave(nuova[k].valore);
+    });
+    if (diversi) return nuova;
+    var r = JSON.parse(JSON.stringify(nuova));
+    CAMPI_SEMPLICI.forEach(function (k) {
+      if (pieno(precedente[k]) || pieno(nuova[k])) {
+        r[k] = !pieno(nuova[k]) ? precedente[k] : !pieno(precedente[k]) ? nuova[k] : piuAffidabile(precedente[k], nuova[k]);
+      }
+    });
+    if (!indirizzoPieno(nuova.residenza)) r.residenza = precedente.residenza;
+    else if (indirizzoPieno(precedente.residenza)) r.residenza = piuAffidabile(precedente.residenza, nuova.residenza);
+    var sp = nuova.spedizione || {};
+    var indicataOra = sp.stessa_della_residenza === 'SI' || (sp.stessa_della_residenza === 'NO' && indirizzoPieno(sp.indirizzo));
+    if (!indicataOra && precedente.spedizione) r.spedizione = precedente.spedizione;
+    r.paziente_identificato = nuova.paziente_identificato === 'SI' ||
+      (precedente.paziente_identificato === 'SI' && nuova.paziente_identificato !== 'NO') ? 'SI' : nuova.paziente_identificato;
+    r.piu_persone = !!(precedente.piu_persone || nuova.piu_persone);
+    r.documenti = (precedente.documenti || []).concat(nuova.documenti || []);
+    r.note = [precedente.note, nuova.note].filter(Boolean).join(' | ');
+    return r;
+  }
+
+  /** Versione ridotta da conservare nella memoria condivisa (limite 9 KB). */
+  function compatta(e) {
+    var c = JSON.parse(JSON.stringify(e));
+    function taglia(x) {
+      if (x && typeof x.evidenza === 'string') x.evidenza = x.evidenza.slice(0, 120);
+    }
+    CAMPI_SEMPLICI.forEach(function (k) { taglia(c[k]); });
+    taglia(c.residenza);
+    if (c.spedizione) { taglia(c.spedizione); taglia(c.spedizione.indirizzo); }
+    c.documenti = (c.documenti || []).slice(0, 5).map(function (d) {
+      return { file: String(d.file || '').slice(0, 60), tipo: d.tipo, leggibile: d.leggibile, intestatario: d.intestatario };
+    });
+    c.note = String(c.note || '').slice(0, 300);
+    delete c.modello;
+    return c;
+  }
+
+  return { estrai: estrai, contenuti: contenuti, unisci: unisci, compatta: compatta, SCHEMA: SCHEMA, SISTEMA: SISTEMA, FONTI: FONTI };
 })();

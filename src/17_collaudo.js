@@ -10,6 +10,8 @@
  *
  * Gira a blocchi (trigger ogni 5 minuti) finché tutti i casi sono elaborati,
  * poi scrive il foglio "Riepilogo collaudo" con le misure per ogni soglia.
+ * Usa la casella di chi lo avvia: va avviato dall'account che inoltra le
+ * conferme all'ufficio ordini.
  */
 
 var Collaudo = (function () {
@@ -88,7 +90,7 @@ var Collaudo = (function () {
       if (positivi[email2] || visti[email2]) continue;
       visti[email2] = true;
       var dto = Posta.dto(ultimo);
-      if (!Prefiltro.valuta(dto, { haRelazione: Posta.haRelazione(email2) }).passa) continue;
+      if (!Prefiltro.valuta(dto, { haRelazione: Posta.haRelazione(email2, dto) }).passa) continue;
       casi.push(['NEGATIVO', email2, dto.threadId, dto.id, dto.dataMs]);
       negativi++;
     }
@@ -194,7 +196,7 @@ var Collaudo = (function () {
   /** Elabora i casi rimasti finché c'è tempo; alla fine scrive il riepilogo. */
   function continua() {
     var inizio = Date.now();
-    var lock = LockService.getScriptLock();
+    var lock = LockService.getUserLock();
     if (!lock.tryLock(5000)) return;
     try {
       var foglioCasi = Registro.foglio(CONFIG.FOGLI.COLLAUDO_CASI, INTESTAZIONI_CASI);

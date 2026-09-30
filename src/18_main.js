@@ -1,20 +1,25 @@
 /**
  * Punti di ingresso: menu del Foglio, configurazione, trigger.
  * Le funzioni qui sotto sono quelle che si vedono nell'editor di Apps Script.
+ *
+ * Più caselle: il Foglio (con lo script) si condivide con i colleghi; ognuno apre
+ * il Foglio e usa "Attiva il controllo sulla mia casella". Il trigger gira con
+ * l'account di chi lo attiva e quindi legge la sua casella. Chiavi, modalità,
+ * Registro e stato dei pazienti sono in comune.
  */
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Anagrafiche')
-    .addItem('1. Configura chiavi e impostazioni', 'configura')
-    .addItem('2. Verifica connessioni', 'verificaConnessioni')
-    .addItem('3. Attiva controllo automatico (ogni 10 minuti)', 'attivaAutomazione')
+    .addItem('1. Configura chiavi e impostazioni (una volta sola)', 'configura')
+    .addItem('2. Verifica connessioni e caselle', 'verificaConnessioni')
+    .addItem('3. Attiva il controllo sulla mia casella (ogni 10 minuti)', 'attivaAutomazione')
     .addSeparator()
-    .addItem('Esegui adesso', 'esegui')
+    .addItem('Esegui adesso sulla mia casella', 'esegui')
     .addItem('Avvia collaudo sullo storico', 'avviaCollaudo')
-    .addItem('Cambia modalità (OMBRA / LIVE)', 'cambiaModalita')
+    .addItem('Cambia modalità (OMBRA / LIVE, per tutte le caselle)', 'cambiaModalita')
     .addSeparator()
-    .addItem('Disattiva controllo automatico', 'disattivaAutomazione')
+    .addItem('Disattiva il controllo sulla mia casella', 'disattivaAutomazione')
     .addToUi();
 }
 
@@ -71,7 +76,20 @@ function verificaConnessioni() {
     righe.push('Gmail: ERRORE - ' + e.message);
   }
   righe.push('Modalità: ' + Impostazioni.modalita());
+  righe.push('');
+  righe.push('Questa casella: ' + (Posta.casella() || 'sconosciuta') + (triggerAttivo() ? ' (controllo attivo)' : ' (controllo NON attivo)'));
+  righe.push('Caselle registrate:');
+  var caselle = Stato.elencoCaselle();
+  if (!caselle.length) righe.push('  nessuna');
+  caselle.forEach(function (c) {
+    var giro = c.ultimoGiro ? Utilities.formatDate(new Date(c.ultimoGiro), 'Europe/Rome', 'dd/MM HH:mm') : 'mai';
+    righe.push('  ' + c.email + ': ' + (c.attiva ? 'attiva' : 'disattivata') + ', ultimo giro ' + giro + (c.riepilogo ? ' (' + c.riepilogo + ')' : ''));
+  });
   SpreadsheetApp.getUi().alert(righe.join('\n'));
+}
+
+function triggerAttivo() {
+  return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'esegui'; });
 }
 
 function rimuoviTrigger(nomeFunzione) {
@@ -84,13 +102,16 @@ function attivaAutomazione() {
   rimuoviTrigger('esegui');
   ScriptApp.newTrigger('esegui').timeBased().everyMinutes(CONFIG.MINUTI_TRIGGER).create();
   Posta.creaEtichette();
-  SpreadsheetApp.getUi().alert('Controllo automatico attivo ogni ' + CONFIG.MINUTI_TRIGGER + ' minuti.\nModalità: ' +
+  var casella = Posta.casella();
+  Stato.registraCasella(casella, true);
+  SpreadsheetApp.getUi().alert('Controllo attivo sulla casella ' + casella + ' ogni ' + CONFIG.MINUTI_TRIGGER + ' minuti.\nModalità: ' +
     Impostazioni.modalita() + (Impostazioni.modalita() === 'OMBRA' ? ' (registra soltanto, non scrive su Shopify).' : '.'));
 }
 
 function disattivaAutomazione() {
   rimuoviTrigger('esegui');
-  SpreadsheetApp.getUi().alert('Controllo automatico disattivato.');
+  Stato.registraCasella(Posta.casella(), false);
+  SpreadsheetApp.getUi().alert('Controllo disattivato sulla casella ' + Posta.casella() + '.');
 }
 
 function cambiaModalita() {

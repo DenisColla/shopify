@@ -5,8 +5,9 @@ crea da solo la sua **anagrafica cliente su Shopify**, leggendo le mail e i docu
 (carta d'identità, tessera sanitaria, preventivo firmato). Così, quando l'ufficio crea l'ordine,
 il cliente è già pronto e compilato come lo compilerebbe l'ufficio.
 
-Gira in **Google Apps Script** nell'account Gmail di Migelino, ogni 10 minuti, senza server e senza
-bisogno che un PC sia acceso.
+Gira in **Google Apps Script**, ogni 10 minuti, senza server e senza bisogno che un PC sia acceso, su
+**più caselle** della stessa organizzazione (es. Denis, Silvia, Marco): un solo Foglio con lo script, e ogni collega
+attiva il controllo sulla propria casella.
 
 ## Come funziona
 
@@ -53,6 +54,17 @@ Gmail (ogni 10 minuti)
 - **OMBRA** (predefinita): lavora e registra nel Foglio cosa farebbe, **senza scrivere su Shopify** né etichettare.
   Serve per il collaudo in parallelo al lavoro dell'ufficio.
 - **LIVE**: crea e completa le anagrafiche ed etichetta le conversazioni.
+
+La modalità vale per tutte le caselle.
+
+## Più caselle
+
+- Ogni casella ha la propria memoria (ultimo controllo, mail già lette) e le proprie etichette Gmail.
+- In comune: chiavi, regole, modalità, **Registro** (colonna *Casella*) e **stato dei pazienti**.
+- Un paziente che scrive a più persone genera **un solo cliente** (la scrittura su Shopify avviene sotto un blocco
+  condiviso; se il cliente nel frattempo esiste, viene completato invece che duplicato).
+- Documenti a una casella e indirizzo a un'altra: i dati si **uniscono** e l'anagrafica si completa.
+- Attivazione dei colleghi: [docs/INSTALLAZIONE.md](docs/INSTALLAZIONE.md), sezione E.
 
 ## Documentazione
 

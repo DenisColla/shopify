@@ -1,7 +1,8 @@
 # Installazione (circa 15 minuti)
 
 Servono tre cose: una **chiave API di Claude**, un'**app Shopify** con permessi sui clienti e un **Foglio Google**
-che contiene lo script. Tutto si fa dal browser, con l'account Google che riceve le mail dei pazienti.
+che contiene lo script. Tutto si fa dal browser. L'installazione si fa **una volta sola** (sezioni A-D); poi ogni
+collega attiva il controllo sulla propria casella con un clic (sezione E).
 
 I valori da inserire che non sono in questo documento (identificativo del modello Claude e dominio `.myshopify.com`
 del negozio) vengono comunicati a parte al momento dell'installazione.
@@ -50,26 +51,55 @@ si può usare quel token al posto di Client ID/Secret.
    - l'identificativo del modello Claude (comunicato a parte);
    - il dominio del negozio (`…myshopify.com`, comunicato a parte);
    - Client ID e Client secret di Shopify (oppure, in alternativa, il token fisso).
-7. **Anagrafiche → 2. Verifica connessioni**: devono risultare OK Claude, Shopify e Gmail.
-8. **Anagrafiche → 3. Attiva controllo automatico**. Parte in modalità **OMBRA**: registra nel foglio "Registro" cosa
-   farebbe, senza scrivere su Shopify.
+7. **Anagrafiche → 2. Verifica connessioni e caselle**: devono risultare OK Claude, Shopify e Gmail.
+8. **Anagrafiche → 3. Attiva il controllo sulla mia casella**. Parte in modalità **OMBRA**: registra nel foglio
+   "Registro" cosa farebbe, senza scrivere su Shopify.
 
 ## D. Collaudo e avvio
 
-1. **Anagrafiche → Avvia collaudo sullo storico**: chiede l'email dell'ufficio ordini (quella a cui si inoltrano le
-   conferme), poi rilegge le conferme degli ultimi mesi (sola lettura) e le confronta con le anagrafiche create a mano. Dura 1-2 ore e prosegue da solo. Il risultato è nel foglio
-   "Riepilogo collaudo" (precisione del riconoscimento e accuratezza di ogni campo per soglia).
+1. **Anagrafiche → Avvia collaudo sullo storico**, dall'account che inoltra le conferme all'ufficio ordini: chiede
+   l'email dell'ufficio ordini, poi rilegge le conferme degli ultimi mesi (sola lettura) e le confronta con le
+   anagrafiche create a mano. Dura 1-2 ore e prosegue da solo. Il risultato è nel foglio "Riepilogo collaudo"
+   (precisione del riconoscimento e accuratezza di ogni campo per soglia).
 2. **Prova in parallelo** per circa 5 giorni lavorativi: l'ufficio lavora come sempre, il sistema registra cosa
    avrebbe fatto. Si confrontano le righe del Registro con le anagrafiche reali.
-3. Con risultati buoni: **Anagrafiche → Cambia modalità** → **LIVE**.
+3. Con risultati buoni: **Anagrafiche → Cambia modalità** → **LIVE** (vale per tutte le caselle).
 
 Note:
 
 - Le conferme arrivate durante la modalità OMBRA restano da gestire a mano: il sistema non le rielabora al passaggio in
   LIVE. Per una singola conversazione si può sempre usare l'etichetta `Anagrafica/▶ Crea`.
 - Per aggiornare il codice: incollare di nuovo `dist/Anagrafica.gs` e salvare. Impostazioni e memoria restano.
-- Per fermare tutto: **Anagrafiche → Disattiva controllo automatico**.
-- Condividi il Foglio solo con chi deve vederlo: chi può modificarlo può vedere anche le impostazioni dello script.
+- Per fermare una casella: da quell'account, **Anagrafiche → Disattiva il controllo sulla mia casella**.
+- Condividi il Foglio solo con chi deve vederlo: chi può modificarlo può vedere anche le impostazioni dello script
+  (comprese le chiavi).
+
+## E. Attivare le caselle dei colleghi (2 minuti a testa)
+
+Lo stesso Foglio, con lo stesso script, lavora su più caselle della stessa organizzazione Google Workspace: il controllo
+gira con l'account di chi lo attiva e legge la sua casella. Chiavi, regole, modalità e Registro sono in comune; non va
+reinstallato nulla.
+
+1. Dal Foglio: **Condividi** → aggiungi i colleghi (i loro indirizzi `@migelino`) come **Editor**.
+2. Ogni collega apre il Foglio con il **proprio account**, poi **Anagrafiche → 3. Attiva il controllo sulla mia
+   casella** e autorizza lo script con il proprio account (stessa schermata di autorizzazione vista sopra).
+   Non serve rifare "Configura".
+3. Da qualsiasi account, **Anagrafiche → 2. Verifica connessioni e caselle** mostra tutte le caselle attive e l'ora
+   dell'ultimo controllo di ciascuna.
+
+Come si comporta con più caselle:
+
+- Il Registro è unico: la colonna **Casella** dice da quale casella arriva ogni riga.
+- Se lo stesso paziente scrive a più persone (es. in copia), il cliente viene creato **una volta sola**: le altre
+  caselle lo trovano già esistente e segnano "✅ Completata".
+- Se il paziente manda i documenti a una casella e l'indirizzo a un'altra, i dati vengono **uniti**: la conferma
+  "Dati mancanti" di una casella si completa con la mail arrivata all'altra. Per farlo, i dati letti restano nella
+  memoria condivisa dello script finché l'anagrafica non è completa (al massimo 45 giorni).
+- Le etichette in Gmail sono di ciascuna casella; a ogni giro ogni casella aggiorna le proprie conversazioni
+  "Dati mancanti" se il paziente è stato completato altrove.
+- Le mail inoltrate tra colleghi (es. "Fwd:" da Denis a Silvia) vengono ignorate: il mittente è interno.
+- Se Google blocca l'autorizzazione ("app bloccata dall'amministratore"), l'amministratore di Google Workspace deve
+  consentire lo script: Console di amministrazione → Sicurezza → Controlli API → Controllo accesso app.
 
 ## Impostazioni avanzate (Proprietà dello script)
 

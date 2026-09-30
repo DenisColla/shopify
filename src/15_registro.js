@@ -1,12 +1,13 @@
 /**
- * Registro delle decisioni nel Foglio Google che contiene lo script.
+ * Registro delle decisioni nel Foglio Google che contiene lo script, unico per
+ * tutte le caselle (la colonna "Casella" dice da quale casella arriva la riga).
  * In modalità LIVE non si salvano i valori dei campi (restano solo in Shopify);
  * in modalità OMBRA si salva la proposta, per confrontarla con il lavoro dell'ufficio.
  */
 
 var Registro = (function () {
   var CHIAVE_ID = 'REGISTRO_ID';
-  var INTESTAZIONI = ['Data', 'Modalità', 'Esito', 'Tipo', 'Prob. conferma', 'Paziente', 'Email', 'Mail',
+  var INTESTAZIONI = ['Data', 'Modalità', 'Casella', 'Esito', 'Tipo', 'Prob. conferma', 'Paziente', 'Email', 'Mail',
     'Cliente Shopify', 'Dettagli', 'Frase di conferma', 'Proposta (solo ombra)', 'Errore'];
 
   function documento() {
@@ -39,7 +40,7 @@ var Registro = (function () {
   }
 
   /**
-   * voce = { modalita, esito, tipo, probabilita, paziente, email, linkMail, linkCliente,
+   * voce = { modalita, casella, esito, tipo, probabilita, paziente, email, linkMail, linkCliente,
    *          dettagli, frase, proposta, errore }
    */
   function scrivi(voce) {
@@ -47,6 +48,7 @@ var Registro = (function () {
     f.appendRow([
       new Date(),
       voce.modalita || '',
+      voce.casella || '',
       voce.esito || '',
       voce.tipo || '',
       voce.probabilita === undefined || voce.probabilita === null ? '' : Math.round(voce.probabilita * 100) + '%',

@@ -14,7 +14,7 @@ export function fileSorgenti() {
   return readdirSync(cartellaSrc).filter((f) => f.endsWith('.js')).sort();
 }
 
-class ProprietaFinte {
+export class ProprietaFinte {
   constructor(iniziali = {}) { this.dati = { ...iniziali }; }
   getProperty(k) { return Object.prototype.hasOwnProperty.call(this.dati, k) ? this.dati[k] : null; }
   setProperty(k, v) { this.dati[k] = String(v); return this; }
@@ -31,18 +31,20 @@ class RispostaFinta {
 
 /**
  * Crea un ambiente con i sorgenti caricati.
- * opzioni.proprieta: Proprietà dello script iniziali
+ * opzioni.proprieta: Proprietà dello script (oggetto, oppure una ProprietaFinte da condividere tra ambienti)
+ * opzioni.proprietaUtente: Proprietà dell'utente (una per casella)
  * opzioni.fetch: funzione (url, parametri) => {codice, corpo} per simulare le API
  */
 export function creaAmbiente(opzioni = {}) {
-  const proprieta = new ProprietaFinte(opzioni.proprieta || {});
+  const proprieta = opzioni.proprieta instanceof ProprietaFinte ? opzioni.proprieta : new ProprietaFinte(opzioni.proprieta || {});
+  const proprietaUtente = opzioni.proprietaUtente instanceof ProprietaFinte ? opzioni.proprietaUtente : new ProprietaFinte(opzioni.proprietaUtente || {});
   const chiamate = [];
   const log = [];
   const cache = new Map();
 
   const contesto = {
     console,
-    PropertiesService: { getScriptProperties: () => proprieta },
+    PropertiesService: { getScriptProperties: () => proprieta, getUserProperties: () => proprietaUtente },
     UrlFetchApp: {
       fetch: (url, parametri = {}) => {
         chiamate.push({ url, parametri });
@@ -83,7 +85,7 @@ export function creaAmbiente(opzioni = {}) {
     const codice = readFileSync(path.join(cartellaSrc, f), 'utf8');
     vm.runInContext(codice, contesto, { filename: f });
   }
-  return { ctx: contesto, proprieta, chiamate, log };
+  return { ctx: contesto, proprieta, proprietaUtente, chiamate, log };
 }
 
 // Persone INVENTATE per i test. I CF vengono calcolati dal codice stesso.

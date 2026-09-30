@@ -1284,7 +1284,71 @@ var Estrattore = (function () {
     return r.dati;
   }
 
-  return { estrai: estrai, contenuti: contenuti, SCHEMA: SCHEMA, SISTEMA: SISTEMA, FONTI: FONTI };
+  var CAMPI_SEMPLICI = ['nome', 'cognome', 'sesso', 'data_nascita', 'luogo_nascita', 'codice_fiscale', 'telefono'];
+
+  function pieno(c) {
+    return !!(c && String(c.valore || '').trim());
+  }
+
+  function indirizzoPieno(x) {
+    return !!(x && (String(x.via || '') + String(x.cap || '') + String(x.comune || '')).trim());
+  }
+
+  function piuAffidabile(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return (Number(b.confidenza) || 0) > (Number(a.confidenza) || 0) ? b : a;
+  }
+
+  /**
+   * Unisce l'estrazione salvata quando mancavano dei dati con quella nuova: per ogni
+   * campo tiene il valore letto con più sicurezza. Serve quando il paziente manda i
+   * documenti in un momento (o a una casella) e l'indirizzo in un altro.
+   * Se nome o cognome sono in contrasto (es. un familiare) non unisce nulla.
+   */
+  function unisci(precedente, nuova) {
+    if (!precedente) return nuova;
+    var diversi = ['nome', 'cognome'].some(function (k) {
+      return pieno(precedente[k]) && pieno(nuova[k]) && Testo.chiave(precedente[k].valore) !== Testo.chiave(nuova[k].valore);
+    });
+    if (diversi) return nuova;
+    var r = JSON.parse(JSON.stringify(nuova));
+    CAMPI_SEMPLICI.forEach(function (k) {
+      if (pieno(precedente[k]) || pieno(nuova[k])) {
+        r[k] = !pieno(nuova[k]) ? precedente[k] : !pieno(precedente[k]) ? nuova[k] : piuAffidabile(precedente[k], nuova[k]);
+      }
+    });
+    if (!indirizzoPieno(nuova.residenza)) r.residenza = precedente.residenza;
+    else if (indirizzoPieno(precedente.residenza)) r.residenza = piuAffidabile(precedente.residenza, nuova.residenza);
+    var sp = nuova.spedizione || {};
+    var indicataOra = sp.stessa_della_residenza === 'SI' || (sp.stessa_della_residenza === 'NO' && indirizzoPieno(sp.indirizzo));
+    if (!indicataOra && precedente.spedizione) r.spedizione = precedente.spedizione;
+    r.paziente_identificato = nuova.paziente_identificato === 'SI' ||
+      (precedente.paziente_identificato === 'SI' && nuova.paziente_identificato !== 'NO') ? 'SI' : nuova.paziente_identificato;
+    r.piu_persone = !!(precedente.piu_persone || nuova.piu_persone);
+    r.documenti = (precedente.documenti || []).concat(nuova.documenti || []);
+    r.note = [precedente.note, nuova.note].filter(Boolean).join(' | ');
+    return r;
+  }
+
+  /** Versione ridotta da conservare nella memoria condivisa (limite 9 KB). */
+  function compatta(e) {
+    var c = JSON.parse(JSON.stringify(e));
+    function taglia(x) {
+      if (x && typeof x.evidenza === 'string') x.evidenza = x.evidenza.slice(0, 120);
+    }
+    CAMPI_SEMPLICI.forEach(function (k) { taglia(c[k]); });
+    taglia(c.residenza);
+    if (c.spedizione) { taglia(c.spedizione); taglia(c.spedizione.indirizzo); }
+    c.documenti = (c.documenti || []).slice(0, 5).map(function (d) {
+      return { file: String(d.file || '').slice(0, 60), tipo: d.tipo, leggibile: d.leggibile, intestatario: d.intestatario };
+    });
+    c.note = String(c.note || '').slice(0, 300);
+    delete c.modello;
+    return c;
+  }
+
+  return { estrai: estrai, contenuti: contenuti, unisci: unisci, compatta: compatta, SCHEMA: SCHEMA, SISTEMA: SISTEMA, FONTI: FONTI };
 })();
 
 // ===== 11_decisione.js =====
@@ -1659,10 +1723,11 @@ var Shopify = (function () {
   var M_ELIMINA = 'mutation EliminaCliente($input: CustomerDeleteInput!) { customerDelete(input: $input) { deletedCustomerId userErrors { field message } } }';
   var Q_NEGOZIO = 'query Negozio { shop { name myshopifyDomain } }';
 
-  function ErroreShopify(messaggio, dettagli) {
+  function ErroreShopify(messaggio, dettagli, codice) {
     this.name = 'ErroreShopify';
     this.message = messaggio;
     this.dettagli = dettagli || [];
+    this.codice = codice || '';
   }
   ErroreShopify.prototype = Object.create(Error.prototype);
 
@@ -1765,9 +1830,19 @@ var Shopify = (function () {
     });
   }
 
+  function emailGiaUsata(errori) {
+    return errori.some(function (e) {
+      return /email/i.test(String(e.field || '')) && /taken|already|già/i.test(e.message || '');
+    });
+  }
+
   function creaCliente(input, avvisi) {
     var d = graphql(M_CREA_CLIENTE, { input: input }).customerCreate;
     var errori = erroriUtente(d);
+    if (errori.length && emailGiaUsata(errori)) {
+      // creato nel frattempo (a mano o da un'altra casella): chi chiama rilegge il cliente e completa
+      throw new ErroreShopify('Cliente già esistente con questa email', errori.map(function (e) { return e.message; }), 'EMAIL_ESISTENTE');
+    }
     if (errori.length && input.phone && telefonoGiaUsato(errori)) {
       avvisi.push('Telefono ' + input.phone + ' già usato da un altro cliente: creato senza telefono');
       var senza = JSON.parse(JSON.stringify(input));
@@ -1931,10 +2006,20 @@ var Posta = (function () {
     return messaggi;
   }
 
-  /** Migelino ha già scritto a questo indirizzo? */
-  function haRelazione(email) {
+  /**
+   * Il mittente è già in contatto con Migelino? Vero se il messaggio risponde o cita
+   * una mail di Migelino (anche di un collega, es. il paziente scrive a Silvia rispondendo
+   * a una mail di Denis) oppure se da questa casella gli si è già scritto.
+   */
+  function haRelazione(email, msg) {
+    if (msg && /@migelino\.(it|ch)\b/i.test(msg.testo || '')) return true;
     var q = 'to:' + email + ' (from:me OR from:migelino.it OR from:migelino.ch)';
     return GmailApp.search(q, 0, 1).length > 0;
+  }
+
+  /** Email della casella su cui gira lo script (chi ha attivato il trigger). */
+  function casella() {
+    try { return String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
   }
 
   /** Conversazione fino al messaggio indicato (compreso), per il riconoscimento. */
@@ -2044,8 +2129,7 @@ var Posta = (function () {
   }
 
   function link(threadId) {
-    var utente = '';
-    try { utente = Session.getEffectiveUser().getEmail(); } catch (e) { utente = ''; }
+    var utente = casella();
     return 'https://mail.google.com/mail/' + (utente ? '?authuser=' + encodeURIComponent(utente) : 'u/0/') + '#all/' + threadId;
   }
 
@@ -2053,6 +2137,7 @@ var Posta = (function () {
     dto: dto,
     nuoviMessaggi: nuoviMessaggi,
     haRelazione: haRelazione,
+    casella: casella,
     conversazione: conversazione,
     dossier: dossier,
     creaEtichette: creaEtichette,
@@ -2067,41 +2152,58 @@ var Posta = (function () {
 
 // ===== 14_stato.js =====
 /**
- * Memoria tra un'esecuzione e l'altra (Proprietà dello script):
- * - ultimo controllo della posta;
- * - messaggi già elaborati (per non rielaborarli);
- * - ultimo esito per paziente (per completare l'anagrafica quando arrivano i dati mancanti).
+ * Memoria tra un'esecuzione e l'altra.
+ *
+ * Lo script può girare su più caselle (Denis, Silvia, Marco): ognuno attiva il
+ * controllo con il proprio account e il trigger gira come quella persona.
+ *  - Proprietà UTENTE (una per casella): ultimo controllo, messaggi già elaborati.
+ *  - Proprietà SCRIPT (condivise): stato di ogni paziente, così una conferma
+ *    arrivata a una casella si completa anche se i dati mancanti arrivano a un'altra;
+ *    registro delle caselle attive.
  */
 
 var Stato = (function () {
   var PREFISSO_MSG = 'm_';
   var PREFISSO_PAZIENTE = 'p_';
+  var PREFISSO_CASELLA = 'casella_';
   var ULTIMA_PULIZIA = 'ULTIMA_PULIZIA';
   var GIORNO_MS = 24 * 60 * 60 * 1000;
 
-  function proprieta() {
+  function utente() {
+    return PropertiesService.getUserProperties();
+  }
+
+  function condivise() {
     return PropertiesService.getScriptProperties();
   }
 
   function ultimoControllo() {
-    var v = Number(proprieta().getProperty(CHIAVI.ULTIMO_CONTROLLO));
-    return v > 0 ? v : Date.now() - GIORNO_MS; // al primo avvio guarda le ultime 24 ore
+    var v = Number(utente().getProperty(CHIAVI.ULTIMO_CONTROLLO));
+    if (v > 0) return v;
+    // versione precedente (una sola casella): il valore stava nelle proprietà condivise
+    var vecchio = Number(condivise().getProperty(CHIAVI.ULTIMO_CONTROLLO));
+    if (vecchio > 0) {
+      condivise().deleteProperty(CHIAVI.ULTIMO_CONTROLLO);
+      return vecchio;
+    }
+    return Date.now() - GIORNO_MS; // al primo avvio guarda le ultime 24 ore
   }
 
   function salvaUltimoControllo(ms) {
-    proprieta().setProperty(CHIAVI.ULTIMO_CONTROLLO, String(Math.floor(ms)));
+    utente().setProperty(CHIAVI.ULTIMO_CONTROLLO, String(Math.floor(ms)));
   }
 
   function giaElaborato(idMessaggio) {
-    return proprieta().getProperty(PREFISSO_MSG + idMessaggio) !== null;
+    return utente().getProperty(PREFISSO_MSG + idMessaggio) !== null ||
+      condivise().getProperty(PREFISSO_MSG + idMessaggio) !== null; // versione precedente
   }
 
   function segnaElaborato(idMessaggio) {
-    proprieta().setProperty(PREFISSO_MSG + idMessaggio, String(Date.now()));
+    utente().setProperty(PREFISSO_MSG + idMessaggio, String(Date.now()));
   }
 
   function statoPaziente(email) {
-    var v = proprieta().getProperty(PREFISSO_PAZIENTE + String(email).toLowerCase());
+    var v = condivise().getProperty(PREFISSO_PAZIENTE + String(email).toLowerCase());
     if (!v) return null;
     try {
       var s = JSON.parse(v);
@@ -2112,25 +2214,64 @@ var Stato = (function () {
     }
   }
 
+  /** stato = { esito, tipo, threadId, casella, estrazione (solo se mancano dati) } */
   function salvaStatoPaziente(email, stato) {
     stato.ts = Date.now();
-    proprieta().setProperty(PREFISSO_PAZIENTE + String(email).toLowerCase(), JSON.stringify(stato));
+    var testo = JSON.stringify(stato);
+    if (testo.length > 8500 && stato.estrazione) { // limite di 9 KB per proprietà
+      delete stato.estrazione;
+      testo = JSON.stringify(stato);
+    }
+    condivise().setProperty(PREFISSO_PAZIENTE + String(email).toLowerCase(), testo);
   }
 
-  /** Cancella le voci più vecchie della finestra di memoria (una volta al giorno). */
+  // ------------------------------------------------------------ caselle attive
+  function registraCasella(email, attiva) {
+    var chiave = PREFISSO_CASELLA + String(email).toLowerCase();
+    var s = leggiCasella(chiave) || {};
+    s.attiva = attiva;
+    if (attiva) s.dal = Date.now();
+    condivise().setProperty(chiave, JSON.stringify(s));
+  }
+
+  function leggiCasella(chiave) {
+    try { return JSON.parse(condivise().getProperty(chiave) || 'null'); } catch (e) { return null; }
+  }
+
+  /** Aggiorna l'ora dell'ultimo giro di questa casella (per vedere se un trigger si è fermato). */
+  function battito(email, riepilogo) {
+    var chiave = PREFISSO_CASELLA + String(email).toLowerCase();
+    var s = leggiCasella(chiave) || { attiva: true, dal: Date.now() };
+    s.ultimoGiro = Date.now();
+    s.riepilogo = riepilogo || '';
+    condivise().setProperty(chiave, JSON.stringify(s));
+  }
+
+  function elencoCaselle() {
+    var tutte = condivise().getProperties();
+    return Object.keys(tutte).filter(function (k) { return k.indexOf(PREFISSO_CASELLA) === 0; }).map(function (k) {
+      var s = leggiCasella(k) || {};
+      s.email = k.slice(PREFISSO_CASELLA.length);
+      return s;
+    });
+  }
+
+  /** Cancella le voci più vecchie della finestra di memoria (una volta al giorno per casella). */
   function pulisci() {
-    var p = proprieta();
-    var ultima = Number(p.getProperty(ULTIMA_PULIZIA)) || 0;
+    var u = utente();
+    var ultima = Number(u.getProperty(ULTIMA_PULIZIA)) || 0;
     if (Date.now() - ultima < GIORNO_MS) return;
     var limite = Date.now() - CONFIG.GIORNI_MEMORIA_STATO * GIORNO_MS;
-    var tutte = p.getProperties();
-    Object.keys(tutte).forEach(function (k) {
-      if (k.indexOf(PREFISSO_MSG) === 0 && Number(tutte[k]) < limite) p.deleteProperty(k);
-      if (k.indexOf(PREFISSO_PAZIENTE) === 0) {
-        try { if (JSON.parse(tutte[k]).ts < limite) p.deleteProperty(k); } catch (e) { p.deleteProperty(k); }
-      }
+    [u, condivise()].forEach(function (p) {
+      var tutte = p.getProperties();
+      Object.keys(tutte).forEach(function (k) {
+        if (k.indexOf(PREFISSO_MSG) === 0 && Number(tutte[k]) < limite) p.deleteProperty(k);
+        if (k.indexOf(PREFISSO_PAZIENTE) === 0) {
+          try { if (JSON.parse(tutte[k]).ts < limite) p.deleteProperty(k); } catch (e) { p.deleteProperty(k); }
+        }
+      });
     });
-    p.setProperty(ULTIMA_PULIZIA, String(Date.now()));
+    u.setProperty(ULTIMA_PULIZIA, String(Date.now()));
   }
 
   return {
@@ -2140,20 +2281,24 @@ var Stato = (function () {
     segnaElaborato: segnaElaborato,
     statoPaziente: statoPaziente,
     salvaStatoPaziente: salvaStatoPaziente,
+    registraCasella: registraCasella,
+    battito: battito,
+    elencoCaselle: elencoCaselle,
     pulisci: pulisci
   };
 })();
 
 // ===== 15_registro.js =====
 /**
- * Registro delle decisioni nel Foglio Google che contiene lo script.
+ * Registro delle decisioni nel Foglio Google che contiene lo script, unico per
+ * tutte le caselle (la colonna "Casella" dice da quale casella arriva la riga).
  * In modalità LIVE non si salvano i valori dei campi (restano solo in Shopify);
  * in modalità OMBRA si salva la proposta, per confrontarla con il lavoro dell'ufficio.
  */
 
 var Registro = (function () {
   var CHIAVE_ID = 'REGISTRO_ID';
-  var INTESTAZIONI = ['Data', 'Modalità', 'Esito', 'Tipo', 'Prob. conferma', 'Paziente', 'Email', 'Mail',
+  var INTESTAZIONI = ['Data', 'Modalità', 'Casella', 'Esito', 'Tipo', 'Prob. conferma', 'Paziente', 'Email', 'Mail',
     'Cliente Shopify', 'Dettagli', 'Frase di conferma', 'Proposta (solo ombra)', 'Errore'];
 
   function documento() {
@@ -2186,7 +2331,7 @@ var Registro = (function () {
   }
 
   /**
-   * voce = { modalita, esito, tipo, probabilita, paziente, email, linkMail, linkCliente,
+   * voce = { modalita, casella, esito, tipo, probabilita, paziente, email, linkMail, linkCliente,
    *          dettagli, frase, proposta, errore }
    */
   function scrivi(voce) {
@@ -2194,6 +2339,7 @@ var Registro = (function () {
     f.appendRow([
       new Date(),
       voce.modalita || '',
+      voce.casella || '',
       voce.esito || '',
       voce.tipo || '',
       voce.probabilita === undefined || voce.probabilita === null ? '' : Math.round(voce.probabilita * 100) + '%',
@@ -2218,6 +2364,10 @@ var Registro = (function () {
  *  filtro a regole -> riconoscimento conferma (Claude) -> raccolta mail e allegati
  *  -> estrazione (Claude) -> cliente esistente? -> decisione (regole Migelino)
  *  -> scrittura su Shopify (solo LIVE) -> etichetta Gmail -> Registro
+ *
+ * Gira sulla casella di chi ha attivato il trigger (Denis, Silvia, Marco...).
+ * La scrittura su Shopify avviene sotto un blocco condiviso tra le caselle, così
+ * due caselle che ricevono la stessa conferma non creano due volte il cliente.
  */
 
 var Pipeline = (function () {
@@ -2253,6 +2403,44 @@ var Pipeline = (function () {
   }
 
   /**
+   * Cerca il cliente, decide ed eventualmente scrive su Shopify sotto un blocco
+   * condiviso tra tutte le caselle. Se nel frattempo il cliente è stato creato
+   * (a mano o da un'altra casella) rilegge e completa invece di duplicare.
+   */
+  function decidiEScrivi(msg, estrazione, tipo, modalita, avvisiRaccolta) {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(60000);
+    try {
+      for (var tentativo = 0; tentativo < 2; tentativo++) {
+        var esistente = Shopify.cercaCliente(msg.mittente);
+        var piano = Decisione.valuta({
+          estrazione: estrazione,
+          email: msg.mittente,
+          clienteEsistente: esistente,
+          soglia: Impostazioni.sogliaCampo(),
+          tipoConferma: tipo,
+          dataConferma: msg.dataIso
+        });
+        piano.avvisi = piano.avvisi.concat(avvisiRaccolta);
+        var risultato = { clienteId: esistente ? esistente.id : null, url: esistente ? Shopify.urlCliente(esistente.id) : '', avvisi: [] };
+        if (modalita === 'LIVE' && (piano.esito === 'CREA' || piano.esito === 'AGGIORNA')) {
+          try {
+            risultato = Shopify.eseguiPiano(piano);
+          } catch (e) {
+            if (e && e.codice === 'EMAIL_ESISTENTE' && tentativo === 0) continue;
+            throw e;
+          }
+          piano.avvisi = piano.avvisi.concat(risultato.avvisi);
+        }
+        return { piano: piano, risultato: risultato };
+      }
+      throw new Error('Cliente creato nel frattempo ma non ritrovato su Shopify');
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  /**
    * Elabora un messaggio. opzioni:
    *  - forzato: true se richiesto con l'etichetta "▶ Crea" (salta riconoscimento)
    *  - modalita: 'LIVE' | 'OMBRA'
@@ -2260,8 +2448,9 @@ var Pipeline = (function () {
    */
   function elaboraMessaggio(msg, opzioni) {
     var modalita = opzioni.modalita;
+    var casella = Posta.casella();
     var voce = {
-      modalita: modalita, email: msg.mittente, paziente: msg.nome, linkMail: Posta.link(msg.threadId)
+      modalita: modalita, casella: casella, email: msg.mittente, paziente: msg.nome, linkMail: Posta.link(msg.threadId)
     };
     var statoPrecedente = Stato.statoPaziente(msg.mittente);
     var completamento = !!(statoPrecedente && statoPrecedente.esito === 'DATI_MANCANTI');
@@ -2269,7 +2458,7 @@ var Pipeline = (function () {
 
     try {
       if (!opzioni.forzato && !completamento) {
-        var filtro = Prefiltro.valuta(msg, { haRelazione: Posta.haRelazione(msg.mittente) });
+        var filtro = Prefiltro.valuta(msg, { haRelazione: !!statoPrecedente || Posta.haRelazione(msg.mittente, msg) });
         if (!filtro.passa) return { esito: 'IGNORATO', usatoClaude: false };
 
         var riconoscimento = Classificatore.classifica(Posta.conversazione(msg.threadId, msg.id));
@@ -2281,7 +2470,7 @@ var Pipeline = (function () {
           voce.dettagli = riconoscimento.motivazione;
           if (riconoscimento.categoria === 'DUBBIA') {
             if (modalita === 'LIVE') Posta.impostaEsito(msg.threadId, CONFIG.ETICHETTE.DUBBIA);
-            Stato.salvaStatoPaziente(msg.mittente, { esito: 'DUBBIA', tipo: riconoscimento.tipo, threadId: msg.threadId });
+            Stato.salvaStatoPaziente(msg.mittente, { esito: 'DUBBIA', tipo: riconoscimento.tipo, threadId: msg.threadId, casella: casella });
           }
           Registro.scrivi(voce);
           return { esito: riconoscimento.categoria, usatoClaude: true };
@@ -2302,25 +2491,15 @@ var Pipeline = (function () {
         nonLeggibili: raccolta.nonLeggibili,
         messaggi: raccolta.messaggi
       });
+      // Dati letti in precedenza (anche da un'altra casella) quando mancava qualcosa
+      if (completamento && statoPrecedente.estrazione) estrazione = Estrattore.unisci(statoPrecedente.estrazione, estrazione);
       var nomeCompleto = [estrazione.nome && estrazione.nome.valore, estrazione.cognome && estrazione.cognome.valore].filter(Boolean).join(' ');
       if (nomeCompleto) voce.paziente = Testo.maiuscoleNome(nomeCompleto);
 
-      var esistente = Shopify.cercaCliente(msg.mittente);
-      var piano = Decisione.valuta({
-        estrazione: estrazione,
-        email: msg.mittente,
-        clienteEsistente: esistente,
-        soglia: Impostazioni.sogliaCampo(),
-        tipoConferma: tipo,
-        dataConferma: msg.dataIso
-      });
-      if (raccolta.nonLeggibili.length) piano.avvisi.push('Allegati non leggibili: ' + raccolta.nonLeggibili.join(', '));
-
-      var risultato = { clienteId: esistente ? esistente.id : null, url: esistente ? Shopify.urlCliente(esistente.id) : '', avvisi: [] };
-      if (modalita === 'LIVE' && (piano.esito === 'CREA' || piano.esito === 'AGGIORNA')) {
-        risultato = Shopify.eseguiPiano(piano);
-        piano.avvisi = piano.avvisi.concat(risultato.avvisi);
-      }
+      var avvisiRaccolta = raccolta.nonLeggibili.length ? ['Allegati non leggibili: ' + raccolta.nonLeggibili.join(', ')] : [];
+      var scrittura = decidiEScrivi(msg, estrazione, tipo, modalita, avvisiRaccolta);
+      var piano = scrittura.piano;
+      var risultato = scrittura.risultato;
 
       voce.esito = TESTO_ESITO[piano.esito] + (modalita === 'OMBRA' && (piano.esito === 'CREA' || piano.esito === 'AGGIORNA') ? ' (simulata)' : '');
       voce.linkCliente = risultato.url;
@@ -2328,12 +2507,15 @@ var Pipeline = (function () {
       voce.proposta = proposta(piano);
       if (modalita === 'LIVE') {
         Posta.impostaEsito(msg.threadId, ETICHETTA_PER_ESITO[piano.esito]);
-        // la conferma poteva essere in un'altra conversazione: aggiorna anche quella
-        if (completamento && statoPrecedente.threadId && statoPrecedente.threadId !== msg.threadId) {
+        // la conferma poteva essere in un'altra conversazione della stessa casella: aggiorna anche quella
+        var stessaCasella = !statoPrecedente || !statoPrecedente.casella || statoPrecedente.casella === casella;
+        if (completamento && stessaCasella && statoPrecedente.threadId && statoPrecedente.threadId !== msg.threadId) {
           try { Posta.impostaEsito(statoPrecedente.threadId, ETICHETTA_PER_ESITO[piano.esito]); } catch (x) { /* conversazione non più disponibile */ }
         }
       }
-      Stato.salvaStatoPaziente(msg.mittente, { esito: piano.esito, tipo: tipo, threadId: msg.threadId });
+      var nuovoStato = { esito: piano.esito, tipo: tipo, threadId: msg.threadId, casella: casella };
+      if (piano.esito === 'DATI_MANCANTI') nuovoStato.estrazione = Estrattore.compatta(estrazione); // per completare dopo
+      Stato.salvaStatoPaziente(msg.mittente, nuovoStato);
       Registro.scrivi(voce);
       return { esito: piano.esito, usatoClaude: true };
     } catch (e) {
@@ -2361,15 +2543,32 @@ var Pipeline = (function () {
     });
   }
 
+  /**
+   * Conversazioni di questa casella ferme su "Dati mancanti" il cui paziente è stato
+   * poi completato (anche da un'altra casella): aggiorna l'etichetta.
+   */
+  function riallineaEtichette(modalita) {
+    if (modalita !== 'LIVE') return;
+    Posta.conversazioniConEtichetta(CONFIG.ETICHETTE.DATI_MANCANTI, 20).forEach(function (t) {
+      var esterni = t.getMessages().filter(function (m) { return !Prefiltro.interno(Testo.estraiEmail(m.getFrom())); });
+      if (!esterni.length) return;
+      var stato = Stato.statoPaziente(Testo.estraiEmail(esterni[esterni.length - 1].getFrom()));
+      if (stato && (stato.esito === 'CREA' || stato.esito === 'AGGIORNA' || stato.esito === 'COMPLETO')) {
+        Posta.impostaEsito(t.getId(), ETICHETTA_PER_ESITO[stato.esito]);
+      }
+    });
+  }
+
   /** Esecuzione periodica (trigger ogni 10 minuti). */
   function esegui() {
     var inizio = Date.now();
-    var lock = LockService.getScriptLock();
+    var lock = LockService.getUserLock(); // un giro alla volta per casella; le caselle non si bloccano a vicenda
     if (!lock.tryLock(5000)) return;
     try {
       var modalita = Impostazioni.modalita();
       Posta.creaEtichette();
       elaboraManuali(inizio, modalita);
+      riallineaEtichette(modalita);
 
       var messaggi = Posta.nuoviMessaggi(Stato.ultimoControllo());
       var conClaude = 0;
@@ -2393,6 +2592,7 @@ var Pipeline = (function () {
       }
       if (completato) Stato.salvaUltimoControllo(inizio);
       else if (ultimo) Stato.salvaUltimoControllo(ultimo);
+      Stato.battito(Posta.casella(), messaggi.length + ' messaggi nuovi, ' + conClaude + ' analizzati');
       Stato.pulisci();
     } finally {
       lock.releaseLock();
@@ -2415,6 +2615,8 @@ var Pipeline = (function () {
  *
  * Gira a blocchi (trigger ogni 5 minuti) finché tutti i casi sono elaborati,
  * poi scrive il foglio "Riepilogo collaudo" con le misure per ogni soglia.
+ * Usa la casella di chi lo avvia: va avviato dall'account che inoltra le
+ * conferme all'ufficio ordini.
  */
 
 var Collaudo = (function () {
@@ -2493,7 +2695,7 @@ var Collaudo = (function () {
       if (positivi[email2] || visti[email2]) continue;
       visti[email2] = true;
       var dto = Posta.dto(ultimo);
-      if (!Prefiltro.valuta(dto, { haRelazione: Posta.haRelazione(email2) }).passa) continue;
+      if (!Prefiltro.valuta(dto, { haRelazione: Posta.haRelazione(email2, dto) }).passa) continue;
       casi.push(['NEGATIVO', email2, dto.threadId, dto.id, dto.dataMs]);
       negativi++;
     }
@@ -2599,7 +2801,7 @@ var Collaudo = (function () {
   /** Elabora i casi rimasti finché c'è tempo; alla fine scrive il riepilogo. */
   function continua() {
     var inizio = Date.now();
-    var lock = LockService.getScriptLock();
+    var lock = LockService.getUserLock();
     if (!lock.tryLock(5000)) return;
     try {
       var foglioCasi = Registro.foglio(CONFIG.FOGLI.COLLAUDO_CASI, INTESTAZIONI_CASI);
@@ -2675,20 +2877,25 @@ var Collaudo = (function () {
 /**
  * Punti di ingresso: menu del Foglio, configurazione, trigger.
  * Le funzioni qui sotto sono quelle che si vedono nell'editor di Apps Script.
+ *
+ * Più caselle: il Foglio (con lo script) si condivide con i colleghi; ognuno apre
+ * il Foglio e usa "Attiva il controllo sulla mia casella". Il trigger gira con
+ * l'account di chi lo attiva e quindi legge la sua casella. Chiavi, modalità,
+ * Registro e stato dei pazienti sono in comune.
  */
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Anagrafiche')
-    .addItem('1. Configura chiavi e impostazioni', 'configura')
-    .addItem('2. Verifica connessioni', 'verificaConnessioni')
-    .addItem('3. Attiva controllo automatico (ogni 10 minuti)', 'attivaAutomazione')
+    .addItem('1. Configura chiavi e impostazioni (una volta sola)', 'configura')
+    .addItem('2. Verifica connessioni e caselle', 'verificaConnessioni')
+    .addItem('3. Attiva il controllo sulla mia casella (ogni 10 minuti)', 'attivaAutomazione')
     .addSeparator()
-    .addItem('Esegui adesso', 'esegui')
+    .addItem('Esegui adesso sulla mia casella', 'esegui')
     .addItem('Avvia collaudo sullo storico', 'avviaCollaudo')
-    .addItem('Cambia modalità (OMBRA / LIVE)', 'cambiaModalita')
+    .addItem('Cambia modalità (OMBRA / LIVE, per tutte le caselle)', 'cambiaModalita')
     .addSeparator()
-    .addItem('Disattiva controllo automatico', 'disattivaAutomazione')
+    .addItem('Disattiva il controllo sulla mia casella', 'disattivaAutomazione')
     .addToUi();
 }
 
@@ -2745,7 +2952,20 @@ function verificaConnessioni() {
     righe.push('Gmail: ERRORE - ' + e.message);
   }
   righe.push('Modalità: ' + Impostazioni.modalita());
+  righe.push('');
+  righe.push('Questa casella: ' + (Posta.casella() || 'sconosciuta') + (triggerAttivo() ? ' (controllo attivo)' : ' (controllo NON attivo)'));
+  righe.push('Caselle registrate:');
+  var caselle = Stato.elencoCaselle();
+  if (!caselle.length) righe.push('  nessuna');
+  caselle.forEach(function (c) {
+    var giro = c.ultimoGiro ? Utilities.formatDate(new Date(c.ultimoGiro), 'Europe/Rome', 'dd/MM HH:mm') : 'mai';
+    righe.push('  ' + c.email + ': ' + (c.attiva ? 'attiva' : 'disattivata') + ', ultimo giro ' + giro + (c.riepilogo ? ' (' + c.riepilogo + ')' : ''));
+  });
   SpreadsheetApp.getUi().alert(righe.join('\n'));
+}
+
+function triggerAttivo() {
+  return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'esegui'; });
 }
 
 function rimuoviTrigger(nomeFunzione) {
@@ -2758,13 +2978,16 @@ function attivaAutomazione() {
   rimuoviTrigger('esegui');
   ScriptApp.newTrigger('esegui').timeBased().everyMinutes(CONFIG.MINUTI_TRIGGER).create();
   Posta.creaEtichette();
-  SpreadsheetApp.getUi().alert('Controllo automatico attivo ogni ' + CONFIG.MINUTI_TRIGGER + ' minuti.\nModalità: ' +
+  var casella = Posta.casella();
+  Stato.registraCasella(casella, true);
+  SpreadsheetApp.getUi().alert('Controllo attivo sulla casella ' + casella + ' ogni ' + CONFIG.MINUTI_TRIGGER + ' minuti.\nModalità: ' +
     Impostazioni.modalita() + (Impostazioni.modalita() === 'OMBRA' ? ' (registra soltanto, non scrive su Shopify).' : '.'));
 }
 
 function disattivaAutomazione() {
   rimuoviTrigger('esegui');
-  SpreadsheetApp.getUi().alert('Controllo automatico disattivato.');
+  Stato.registraCasella(Posta.casella(), false);
+  SpreadsheetApp.getUi().alert('Controllo disattivato sulla casella ' + Posta.casella() + '.');
 }
 
 function cambiaModalita() {

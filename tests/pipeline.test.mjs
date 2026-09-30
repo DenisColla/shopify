@@ -59,9 +59,9 @@ test('Modalità OMBRA: riconosce, estrae e registra la proposta senza scrivere s
   const righe = p2.registro();
   assert.equal(righe.length, 1);
   assert.equal(righe[0][1], 'OMBRA');
-  assert.equal(righe[0][2], 'Anagrafica creata (simulata)');
-  assert.equal(righe[0][5], 'Mario Rossi');
-  assert.match(righe[0][11], /"esito":"CREA"/);
+  assert.equal(righe[0][3], 'Anagrafica creata (simulata)');
+  assert.equal(righe[0][6], 'Mario Rossi');
+  assert.match(righe[0][12], /"esito":"CREA"/);
   assert.equal(p2.threads[0].etichette.size, 0);
 });
 
@@ -73,9 +73,9 @@ test('Modalità LIVE: crea il cliente su Shopify ed etichetta la conversazione',
   assert.deepEqual(p.shopify.operazioni.map((o) => o.nome), ['CercaClienti', 'CreaCliente', 'CreaIndirizzo', 'CreaIndirizzo']);
   assert.ok(threads[0].etichette.has('Anagrafica/✅ Creata'));
   const righe = p.registro();
-  assert.equal(righe[0][2], 'Anagrafica creata');
-  assert.match(righe[0][8], /admin\.shopify\.com\/store\/negozio-finto\/customers\/777/);
-  assert.equal(righe[0][11], ''); // in LIVE la proposta non viene salvata nel Foglio
+  assert.equal(righe[0][3], 'Anagrafica creata');
+  assert.match(righe[0][9], /admin\.shopify\.com\/store\/negozio-finto\/customers\/777/);
+  assert.equal(righe[0][12], ''); // in LIVE la proposta non viene salvata nel Foglio
 });
 
 test('Dati mancanti: nulla su Shopify; quando arriva l\'indirizzo si completa senza nuovo riconoscimento', () => {
@@ -86,7 +86,7 @@ test('Dati mancanti: nulla su Shopify; quando arriva l\'indirizzo si completa se
   p.amb.ctx.esegui();
   assert.deepEqual(p.shopify.operazioni.map((o) => o.nome), ['CercaClienti']);
   assert.ok(threads[0].etichette.has('Anagrafica/⚠️ Dati mancanti'));
-  assert.match(p.registro()[0][9], /Mancanti: indirizzo di spedizione/);
+  assert.match(p.registro()[0][10], /Mancanti: indirizzo di spedizione/);
 
   // Il paziente manda l'indirizzo di spedizione: nuova mail nella stessa conversazione.
   threads[0].messaggi.push(new MessaggioFinto({ id: 'm3', da: PAZIENTE, data: new Date(ORA + 60000).toISOString(),
@@ -143,7 +143,7 @@ test('Consenso GDPR: riconosciuto come NON conferma, nessuna estrazione', () => 
   p.amb.ctx.esegui();
   assert.deepEqual(p.richiesteClaude, ['riconoscimento']);
   assert.equal(p.shopify.operazioni.length, 0);
-  assert.equal(p.registro()[0][2], 'Non è una conferma');
+  assert.equal(p.registro()[0][3], 'Non è una conferma');
   assert.equal(threads[0].etichette.size, 0);
 });
 
@@ -176,7 +176,7 @@ test('Etichetta manuale "▶ Crea": salta il riconoscimento e poi viene tolta', 
   assert.deepEqual(p.richiesteClaude, ['estrazione']);
   assert.ok(!threads[0].etichette.has('Anagrafica/▶ Crea'));
   assert.ok(threads[0].etichette.has('Anagrafica/✅ Creata'));
-  assert.match(p.registro()[0][10], /Richiesta manuale/);
+  assert.match(p.registro()[0][11], /Richiesta manuale/);
 });
 
 test('Messaggio già elaborato: non viene rielaborato', () => {
@@ -184,7 +184,7 @@ test('Messaggio già elaborato: non viene rielaborato', () => {
   const threads = [conversazioneConferma('Ecco il preventivo firmato.')];
   const p = prepara({ threads, classificazione: CONFERMA, estrazione: estrazioneMario(cfMario(base.ctx)) });
   p.amb.ctx.esegui();
-  p.amb.proprieta.setProperty('ULTIMO_CONTROLLO', String(ORA - 3600000));
+  p.amb.proprietaUtente.setProperty('ULTIMO_CONTROLLO', String(ORA - 3600000)); // riguarda la stessa ora
   p.amb.ctx.esegui();
   assert.equal(p.richiesteClaude.filter((r) => r === 'riconoscimento').length, 1);
 });
@@ -195,7 +195,7 @@ test('Errore API: registrato ed etichettato, l\'esecuzione non si blocca', () =>
   // l'estrazione restituisce null -> errore nell'analisi dei campi
   p.amb.ctx.esegui();
   const righe = p.registro();
-  assert.equal(righe[0][2], 'Errore');
-  assert.ok(righe[0][12].length > 0);
+  assert.equal(righe[0][3], 'Errore');
+  assert.ok(righe[0][13].length > 0);
   assert.ok(threads[0].etichette.has('Anagrafica/⛔ Errore'));
 });

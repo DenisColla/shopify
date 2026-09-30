@@ -68,10 +68,20 @@ var Posta = (function () {
     return messaggi;
   }
 
-  /** Migelino ha già scritto a questo indirizzo? */
-  function haRelazione(email) {
+  /**
+   * Il mittente è già in contatto con Migelino? Vero se il messaggio risponde o cita
+   * una mail di Migelino (anche di un collega, es. il paziente scrive a Silvia rispondendo
+   * a una mail di Denis) oppure se da questa casella gli si è già scritto.
+   */
+  function haRelazione(email, msg) {
+    if (msg && /@migelino\.(it|ch)\b/i.test(msg.testo || '')) return true;
     var q = 'to:' + email + ' (from:me OR from:migelino.it OR from:migelino.ch)';
     return GmailApp.search(q, 0, 1).length > 0;
+  }
+
+  /** Email della casella su cui gira lo script (chi ha attivato il trigger). */
+  function casella() {
+    try { return String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
   }
 
   /** Conversazione fino al messaggio indicato (compreso), per il riconoscimento. */
@@ -181,8 +191,7 @@ var Posta = (function () {
   }
 
   function link(threadId) {
-    var utente = '';
-    try { utente = Session.getEffectiveUser().getEmail(); } catch (e) { utente = ''; }
+    var utente = casella();
     return 'https://mail.google.com/mail/' + (utente ? '?authuser=' + encodeURIComponent(utente) : 'u/0/') + '#all/' + threadId;
   }
 
@@ -190,6 +199,7 @@ var Posta = (function () {
     dto: dto,
     nuoviMessaggi: nuoviMessaggi,
     haRelazione: haRelazione,
+    casella: casella,
     conversazione: conversazione,
     dossier: dossier,
     creaEtichette: creaEtichette,
