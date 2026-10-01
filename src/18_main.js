@@ -23,7 +23,7 @@ function onOpen() {
     .addToUi();
 }
 
-/** Chiede le impostazioni una alla volta; lasciare vuoto = mantenere il valore attuale. */
+/** Chiede le impostazioni una alla volta; vuoto = mantenere il valore attuale, "-" = cancellarlo. */
 function configura() {
   var ui = SpreadsheetApp.getUi();
   Registro.documento(); // memorizza l'ID di questo Foglio come Registro
@@ -33,16 +33,18 @@ function configura() {
     [CHIAVI.SHOPIFY_SHOP, 'Dominio Shopify (es. nome-negozio.myshopify.com)', false],
     [CHIAVI.SHOPIFY_CLIENT_ID, 'Shopify: Client ID dell\'app (Dev Dashboard)', false],
     [CHIAVI.SHOPIFY_CLIENT_SECRET, 'Shopify: Client Secret dell\'app', true],
-    [CHIAVI.SHOPIFY_ACCESS_TOKEN, 'Shopify: token fisso (solo se NON usi Client ID/Secret)', true]
+    [CHIAVI.SHOPIFY_ACCESS_TOKEN, 'Shopify: token fisso shpat_… (solo se NON hai Client ID/Secret: di solito va lasciato vuoto)', true]
   ];
   for (var i = 0; i < voci.length; i++) {
     var chiave = voci[i][0];
     var attuale = Impostazioni.leggi(chiave, '');
     var mostra = attuale ? (voci[i][2] ? '(già impostata)' : attuale) : '(vuota)';
-    var r = ui.prompt('Configurazione ' + (i + 1) + '/' + voci.length, voci[i][1] + '\nValore attuale: ' + mostra + '\n\nLascia vuoto per non cambiarlo.', ui.ButtonSet.OK_CANCEL);
+    var r = ui.prompt('Configurazione ' + (i + 1) + '/' + voci.length, voci[i][1] + '\nValore attuale: ' + mostra +
+      '\n\nLascia vuoto per non cambiarlo, scrivi - per cancellarlo.', ui.ButtonSet.OK_CANCEL);
     if (r.getSelectedButton() !== ui.Button.OK) return;
     var valore = r.getResponseText().trim();
-    if (valore) Impostazioni.scrivi(chiave, valore);
+    if (valore === '-') Impostazioni.cancella(chiave);
+    else if (valore) Impostazioni.scrivi(chiave, valore);
   }
   if (!Impostazioni.leggi(CHIAVI.MODALITA, '')) Impostazioni.scrivi(CHIAVI.MODALITA, CONFIG.MODALITA_PREDEFINITA);
   ui.alert('Impostazioni salvate. Modalità attuale: ' + Impostazioni.modalita() + '.\nOra usa "2. Verifica connessioni".');
@@ -65,9 +67,11 @@ function verificaConnessioni() {
   }
   try {
     var negozio = Shopify.verifica();
-    righe.push('Shopify: OK (' + negozio.name + ' - ' + negozio.myshopifyDomain + ')');
+    righe.push('Shopify: OK (' + negozio.name + ' - ' + negozio.myshopifyDomain + ', accesso con ' +
+      (negozio.modo === 'CREDENZIALI' ? 'Client ID/Secret' : 'token fisso') + ', clienti leggibili)');
   } catch (e) {
-    righe.push('Shopify: ERRORE - ' + e.message + (e.dettagli ? ' ' + [].concat(e.dettagli).join('; ') : ''));
+    righe.push('Shopify: ERRORE - ' + e.message);
+    [].concat(e.dettagli || []).forEach(function (d) { righe.push('  → ' + d); });
   }
   try {
     Posta.creaEtichette();

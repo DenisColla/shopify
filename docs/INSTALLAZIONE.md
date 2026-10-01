@@ -53,8 +53,12 @@ si può usare quel token al posto di Client ID/Secret.
    - la chiave API di Claude;
    - l'identificativo del modello Claude (comunicato a parte);
    - il dominio del negozio (`…myshopify.com`, comunicato a parte);
-   - Client ID e Client secret di Shopify (oppure, in alternativa, il token fisso).
-7. **Anagrafiche → 2. Verifica connessioni e caselle**: devono risultare OK Claude, Shopify e Gmail.
+   - Client ID e Client secret di Shopify. L'ultima domanda (token fisso) va lasciata **vuota**: serve solo a chi non
+     ha Client ID/Secret.
+
+   In ogni domanda: vuoto = lascia il valore attuale, `-` = cancellalo.
+7. **Anagrafiche → 2. Verifica connessioni e caselle**: devono risultare OK Claude, Shopify (con "clienti leggibili")
+   e Gmail. Se una riga dà errore, sotto c'è l'indicazione di cosa controllare.
 8. **Anagrafiche → 3. Attiva il controllo sulla mia casella**. Parte in modalità **OMBRA**: registra nel foglio
    "Registro" cosa farebbe, senza scrivere su Shopify.
 

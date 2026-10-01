@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { creaAmbiente, PERSONE_FINTE } from './_ambiente.mjs';
-import { SERVIZI_BASE, PROPRIETA_BASE, rispostaClaude, shopifyFinto } from './_servizi_finti.mjs';
+import { SERVIZI_BASE, PROPRIETA_BASE, rispostaClaude, shopifyFinto, fogliFinti } from './_servizi_finti.mjs';
 import { estrazioneMario, SPEDIZIONE_MOGLIE } from './_estrazioni.mjs';
 
 const puro = (x) => JSON.parse(JSON.stringify(x));
@@ -218,4 +218,96 @@ test('Shopify: aggiornamento di un cliente esistente con tag aggiunto (senza sov
   });
   assert.deepEqual(finto.operazioni.map((o) => o.nome), ['AggiornaCliente', 'AggiornaIndirizzo', 'AggiungiTag']);
   assert.deepEqual(puro(finto.operazioni[2].variables.tags), ['anagrafica-auto']);
+});
+
+// ------------------------------------------------------------------ Shopify: accesso e verifica
+const { SHOPIFY_CLIENT_ID: _id, SHOPIFY_CLIENT_SECRET: _segreto, ...PROPRIETA_SENZA_CREDENZIALI } = PROPRIETA_BASE;
+
+function ambienteShopifyCon(proprieta, opzioni) {
+  const finto = shopifyFinto(opzioni);
+  const amb = creaAmbiente({ proprieta, globali: SERVIZI_BASE, fetch: (u, p) => finto.risposta(u, p) });
+  return { ...amb, finto };
+}
+
+const dettagli = (e) => [].concat(e.dettagli || []).join(' | ');
+
+test('Shopify: con Client ID/Secret il token fisso viene ignorato (es. Client secret incollato per errore)', () => {
+  const { ctx, finto, chiamate } = ambienteShopifyCon({ ...PROPRIETA_BASE, SHOPIFY_ACCESS_TOKEN: 'shpss_messo-per-errore' });
+  ctx.Shopify.cercaCliente('mario.rossi@example.com');
+  assert.match(chiamate[0].url, /\/admin\/oauth\/access_token$/);
+  assert.equal(finto.operazioni[0].token, 'token-finto');
+});
+
+test('Shopify: senza Client ID/Secret usa il token fisso, e se non è valido lo dice', () => {
+  const ok = ambienteShopifyCon({ ...PROPRIETA_SENZA_CREDENZIALI, SHOPIFY_ACCESS_TOKEN: 'shpat_fisso' }, { tokenValidi: ['shpat_fisso'] });
+  ok.ctx.Shopify.cercaCliente('mario.rossi@example.com');
+  assert.equal(ok.chiamate.length, 1);
+  assert.equal(ok.finto.operazioni[0].token, 'shpat_fisso');
+
+  const ko = ambienteShopifyCon({ ...PROPRIETA_SENZA_CREDENZIALI, SHOPIFY_ACCESS_TOKEN: 'sbagliato' });
+  assert.throws(() => ko.ctx.Shopify.cercaCliente('mario.rossi@example.com'),
+    (e) => e.message === 'Shopify HTTP 401' && /token fisso non è valido/.test(dettagli(e)));
+  assert.equal(ko.finto.operazioni.length, 1); // nessun nuovo tentativo con lo stesso token
+});
+
+test('Shopify: senza credenziali né token -> errore che spiega cosa configurare', () => {
+  const { ctx } = ambienteShopifyCon(PROPRIETA_SENZA_CREDENZIALI);
+  assert.throws(() => ctx.Shopify.cercaCliente('mario.rossi@example.com'), /Shopify non configurato/);
+});
+
+test('Shopify: token rifiutato (scaduto o revocato) -> ne chiede uno nuovo e riprova una volta', () => {
+  const { ctx, finto, chiamate } = ambienteShopify({ rifiutaTokenUnaVolta: true });
+  ctx.Shopify.cercaCliente('mario.rossi@example.com');
+  assert.equal(chiamate.filter((c) => c.url.endsWith('/admin/oauth/access_token')).length, 2);
+  assert.deepEqual(finto.operazioni.map((o) => o.token), ['token-finto', 'token-finto-1']);
+});
+
+test('Shopify: richiesta del token rifiutata o risposta inattesa -> spiega la causa', () => {
+  const organizzazione = ambienteShopify({ rispostaToken: { codice: 400, corpo: { error: 'shop_not_permitted' } } });
+  assert.throws(() => organizzazione.ctx.Shopify.cercaCliente('mario.rossi@example.com'),
+    (e) => /token non ottenuto \(HTTP 400\)/.test(e.message) && /stessa organizzazione/.test(dettagli(e)));
+  const credenziali = ambienteShopify({ rispostaToken: { codice: 401, corpo: { error: 'invalid_client' } } });
+  assert.throws(() => credenziali.ctx.Shopify.cercaCliente('mario.rossi@example.com'), (e) => /Client secret/.test(dettagli(e)));
+  const pagina = ambienteShopify({ rispostaToken: { codice: 200, corpo: '<html>login</html>' } });
+  assert.throws(() => pagina.ctx.Shopify.cercaCliente('mario.rossi@example.com'), /token non ottenuto \(HTTP 200\)/);
+});
+
+test('Shopify: dominio scritto senza .myshopify.com o con https:// e percorso viene normalizzato', () => {
+  for (const scritto of ['negozio-finto', 'https://Negozio-Finto.myshopify.com/admin']) {
+    const { ctx, chiamate } = ambienteShopifyCon({ ...PROPRIETA_BASE, SHOPIFY_SHOP: scritto });
+    ctx.Shopify.cercaCliente('mario.rossi@example.com');
+    assert.equal(chiamate[0].url, 'https://negozio-finto.myshopify.com/admin/oauth/access_token');
+  }
+});
+
+test('Shopify: la verifica controlla permessi e lettura dei dati protetti dei clienti', () => {
+  const { ctx, finto } = ambienteShopify();
+  const v = puro(ctx.Shopify.verifica());
+  assert.equal(v.name, 'Negozio finto');
+  assert.equal(v.modo, 'CREDENZIALI');
+  assert.deepEqual(finto.operazioni.map((o) => o.nome), ['Negozio', 'ProvaClienti']);
+  // write_customers comprende la lettura
+  assert.equal(puro(ambienteShopify({ permessi: ['write_customers'] }).ctx.Shopify.verifica()).modo, 'CREDENZIALI');
+  assert.throws(() => ambienteShopify({ permessi: ['read_customers'] }).ctx.Shopify.verifica(), /mancano i permessi write_customers/);
+  assert.throws(() => ambienteShopify({ datiProtettiNegati: true }).ctx.Shopify.verifica(),
+    (e) => /non può leggere i dati dei clienti/.test(e.message) && /not approved/.test(dettagli(e)));
+});
+
+// ------------------------------------------------------------------ Configurazione
+test('Configura: vuoto mantiene il valore, "-" lo cancella', () => {
+  const risposte = ['', 'modello-nuovo', '', '', '', '-'];
+  const ui = {
+    ButtonSet: { OK_CANCEL: 'OK_CANCEL' }, Button: { OK: 'OK' }, alert: () => {},
+    prompt: () => ({ getSelectedButton: () => 'OK', getResponseText: () => risposte.shift() ?? '' })
+  };
+  const amb = creaAmbiente({
+    proprieta: { ...PROPRIETA_BASE, SHOPIFY_ACCESS_TOKEN: 'shpss_messo-per-errore' },
+    globali: { ...SERVIZI_BASE, SpreadsheetApp: { ...fogliFinti().SpreadsheetApp, getUi: () => ui } }
+  });
+  amb.ctx.configura();
+  assert.equal(amb.proprieta.getProperty('CLAUDE_MODEL'), 'modello-nuovo');
+  assert.equal(amb.proprieta.getProperty('ANTHROPIC_API_KEY'), 'chiave-finta');
+  assert.equal(amb.proprieta.getProperty('SHOPIFY_CLIENT_SECRET'), 'segreto-finto');
+  assert.equal(amb.proprieta.getProperty('SHOPIFY_ACCESS_TOKEN'), null);
+  assert.equal(amb.proprieta.getProperty('MODALITA'), 'OMBRA');
 });

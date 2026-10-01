@@ -137,17 +137,33 @@ export function rispostaClaude(dati, stop = 'end_turn') {
  * API Shopify finta: registra le operazioni GraphQL.
  * opzioni.clienti: clienti già esistenti (nodi GraphQL)
  * opzioni.errori: { nomeOperazione: [userErrors] } restituiti alla prima chiamata
+ * opzioni.tokenValidi: token accettati dalle API (predefinito: quelli emessi dalla finta richiesta del token)
+ * opzioni.rifiutaTokenUnaVolta: la prima chiamata GraphQL risponde 401 (token scaduto o revocato)
+ * opzioni.rispostaToken: risposta della richiesta del token ({ codice, corpo })
+ * opzioni.permessi: permessi dell'app installata
+ * opzioni.datiProtettiNegati: la lettura dei campi protetti dei clienti restituisce un errore
  */
 export function shopifyFinto(opzioni = {}) {
   const operazioni = [];
+  const tokenEmessi = [];
   const errori = { ...(opzioni.errori || {}) };
+  let rifiuta = Boolean(opzioni.rifiutaTokenUnaVolta);
   function risposta(url, parametri) {
     if (url.endsWith('/admin/oauth/access_token')) {
-      return { codice: 200, corpo: { access_token: 'token-finto', scope: 'read_customers,write_customers', expires_in: 86399 } };
+      if (opzioni.rispostaToken) return opzioni.rispostaToken;
+      const t = 'token-finto' + (tokenEmessi.length ? '-' + tokenEmessi.length : '');
+      tokenEmessi.push(t);
+      return { codice: 200, corpo: { access_token: t, scope: 'read_customers,write_customers', expires_in: 86399 } };
     }
     const { query, variables } = JSON.parse(parametri.payload);
     const nome = /(?:query|mutation)\s+(\w+)/.exec(query)[1];
-    operazioni.push({ nome, variables, token: parametri.headers['X-Shopify-Access-Token'] });
+    const token = parametri.headers['X-Shopify-Access-Token'];
+    operazioni.push({ nome, variables, token });
+    const validi = opzioni.tokenValidi || tokenEmessi;
+    if (rifiuta || !validi.includes(token)) {
+      rifiuta = false;
+      return { codice: 401, corpo: { errors: '[API] Invalid API key or access token (unrecognized login or wrong password)' } };
+    }
     const erroreUnaVolta = errori[nome];
     if (erroreUnaVolta) delete errori[nome];
     const ue = erroreUnaVolta || [];
@@ -162,7 +178,14 @@ export function shopifyFinto(opzioni = {}) {
       case 'AggiornaIndirizzo': return { codice: 200, corpo: { data: { customerAddressUpdate: { address: { id: variables.addressId }, userErrors: ue } } } };
       case 'AggiungiTag': return { codice: 200, corpo: { data: { tagsAdd: { node: { id: variables.id }, userErrors: [] } } } };
       case 'EliminaCliente': return { codice: 200, corpo: { data: { customerDelete: { deletedCustomerId: variables.input.id, userErrors: [] } } } };
-      case 'Negozio': return { codice: 200, corpo: { data: { shop: { name: 'Negozio finto', myshopifyDomain: 'negozio-finto.myshopify.com' } } } };
+      case 'Negozio': return { codice: 200, corpo: { data: {
+        shop: { name: 'Negozio finto', myshopifyDomain: 'negozio-finto.myshopify.com' },
+        currentAppInstallation: { accessScopes: (opzioni.permessi || ['read_customers', 'write_customers']).map((handle) => ({ handle })) }
+      } } };
+      case 'ProvaClienti': return opzioni.datiProtettiNegati
+        ? { codice: 200, corpo: { data: { customers: { nodes: [{ id: 'gid://shopify/Customer/1', firstName: null }] } },
+          errors: [{ message: 'This app is not approved to access the Customer object.', path: ['customers', 'nodes', 0, 'firstName'] }] } }
+        : { codice: 200, corpo: { data: { customers: { nodes: [] } } } };
       default: throw new Error('operazione Shopify non prevista: ' + nome);
     }
   }

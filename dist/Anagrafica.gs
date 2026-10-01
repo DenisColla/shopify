@@ -120,6 +120,10 @@ var Impostazioni = {
     this._proprieta().setProperty(chiave, String(valore));
   },
 
+  cancella: function (chiave) {
+    this._proprieta().deleteProperty(chiave);
+  },
+
   numero: function (chiave, predefinito) {
     var n = parseFloat(this.leggi(chiave, ''));
     return isNaN(n) ? predefinito : n;
@@ -1721,7 +1725,10 @@ var Shopify = (function () {
     'customerAddressUpdate(customerId: $customerId, addressId: $addressId, address: $address, setAsDefault: $setAsDefault) { address { id } userErrors { field message } } }';
   var M_TAG = 'mutation AggiungiTag($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { node { id } userErrors { field message } } }';
   var M_ELIMINA = 'mutation EliminaCliente($input: CustomerDeleteInput!) { customerDelete(input: $input) { deletedCustomerId userErrors { field message } } }';
-  var Q_NEGOZIO = 'query Negozio { shop { name myshopifyDomain } }';
+  var Q_NEGOZIO = 'query Negozio { shop { name myshopifyDomain } currentAppInstallation { accessScopes { handle } } }';
+  // Legge un cliente con tutti i campi protetti usati (nome, email, telefono, indirizzo).
+  var Q_PROVA_CLIENTI = 'query ProvaClienti { customers(first: 1) { nodes { id firstName lastName defaultEmailAddress { emailAddress } ' +
+    'defaultPhoneNumber { phoneNumber } addressesV2(first: 1) { nodes { address1 zip } } } } }';
 
   function ErroreShopify(messaggio, dettagli, codice) {
     this.name = 'ErroreShopify';
@@ -1731,13 +1738,32 @@ var Shopify = (function () {
   }
   ErroreShopify.prototype = Object.create(Error.prototype);
 
+  /** Dominio .myshopify.com del negozio; accetta anche "https://…", percorsi e il solo nome. */
   function negozio() {
-    return String(Impostazioni.obbligatoria(CHIAVI.SHOPIFY_SHOP)).replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim();
+    var d = String(Impostazioni.obbligatoria(CHIAVI.SHOPIFY_SHOP)).trim().toLowerCase()
+      .replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    return d.indexOf('.') < 0 ? d + '.myshopify.com' : d;
+  }
+
+  /** Client ID e Secret hanno la precedenza: il token fisso si usa solo se mancano. */
+  function modoAccesso() {
+    if (Impostazioni.leggi(CHIAVI.SHOPIFY_CLIENT_ID, '') && Impostazioni.leggi(CHIAVI.SHOPIFY_CLIENT_SECRET, '')) return 'CREDENZIALI';
+    return Impostazioni.leggi(CHIAVI.SHOPIFY_ACCESS_TOKEN, '') ? 'TOKEN_FISSO' : '';
+  }
+
+  /** Spiega in chiaro i rifiuti più comuni della richiesta del token. */
+  function erroreToken(codice, testo) {
+    var aiuto = 'Controlla Client ID e Client secret (Dev Dashboard → app → Settings)';
+    if (/shop_not_permitted/i.test(testo)) aiuto = 'L\'app e il negozio devono essere nella stessa organizzazione del Dev Dashboard';
+    else if (codice === 404 || !/myshopify\.com$/.test(negozio())) aiuto = 'Controlla il dominio del negozio: deve finire con .myshopify.com';
+    else if (/not.?installed|installation/i.test(testo)) aiuto = 'Installa l\'app sul negozio (Dev Dashboard → Install app)';
+    return new ErroreShopify('Shopify: token non ottenuto (HTTP ' + codice + ')', [String(testo).slice(0, 300), aiuto]);
   }
 
   function token(rinnova) {
-    var fisso = Impostazioni.leggi(CHIAVI.SHOPIFY_ACCESS_TOKEN, '');
-    if (fisso) return fisso;
+    var modo = modoAccesso();
+    if (modo === 'TOKEN_FISSO') return Impostazioni.leggi(CHIAVI.SHOPIFY_ACCESS_TOKEN, '');
+    if (!modo) throw new ErroreShopify('Shopify non configurato: inserisci Client ID e Client secret con "Configura"');
     var cache = CacheService.getScriptCache();
     if (!rinnova) {
       var salvato = cache.get(CHIAVE_CACHE);
@@ -1752,10 +1778,14 @@ var Shopify = (function () {
       },
       muteHttpExceptions: true
     });
-    if (r.getResponseCode() !== 200) {
-      throw new ErroreShopify('Shopify: token non ottenuto (HTTP ' + r.getResponseCode() + ')', [r.getContentText().slice(0, 300)]);
+    if (r.getResponseCode() !== 200) throw erroreToken(r.getResponseCode(), r.getContentText());
+    var dati;
+    try {
+      dati = JSON.parse(r.getContentText());
+    } catch (e) {
+      dati = {};
     }
-    var dati = JSON.parse(r.getContentText());
+    if (!dati.access_token) throw erroreToken(r.getResponseCode(), r.getContentText());
     var durata = Math.max(60, Math.min(21600, (Number(dati.expires_in) || 3600) - 600));
     cache.put(CHIAVE_CACHE, dati.access_token, durata);
     return dati.access_token;
@@ -1772,8 +1802,13 @@ var Shopify = (function () {
         muteHttpExceptions: true
       });
       var codice = r.getResponseCode();
-      if (codice === 401 && !rinnova && !Impostazioni.leggi(CHIAVI.SHOPIFY_ACCESS_TOKEN, '')) { rinnova = true; continue; }
+      if (codice === 401 && !rinnova && modoAccesso() === 'CREDENZIALI') { rinnova = true; continue; }
       if (codice === 429 || codice >= 500) { Utilities.sleep(2000 * (tentativo + 1)); continue; }
+      if (codice === 401) {
+        throw new ErroreShopify('Shopify HTTP 401', [r.getContentText().slice(0, 300), modoAccesso() === 'TOKEN_FISSO'
+          ? 'Il token fisso non è valido: usa Client ID e Client secret dell\'app (guida, sezione B)'
+          : 'Token rifiutato: controlla che l\'app sia installata sul negozio (Dev Dashboard → Install app)']);
+      }
       if (codice !== 200) throw new ErroreShopify('Shopify HTTP ' + codice, [r.getContentText().slice(0, 300)]);
       var corpo = JSON.parse(r.getContentText());
       if (corpo.errors && corpo.errors.length) {
@@ -1921,8 +1956,25 @@ var Shopify = (function () {
     return { clienteId: piano.clienteId || null, url: piano.clienteId ? urlCliente(piano.clienteId) : '', avvisi: avvisi };
   }
 
+  /** Prova accesso, permessi e lettura dei dati protetti dei clienti. */
   function verifica() {
-    return graphql(Q_NEGOZIO, {}).shop;
+    var d = graphql(Q_NEGOZIO, {});
+    var permessi = ((d.currentAppInstallation && d.currentAppInstallation.accessScopes) || []).map(function (s) { return s.handle; });
+    var mancanti = ['read_customers', 'write_customers'].filter(function (p) {
+      return permessi.indexOf(p) < 0 && !(p === 'read_customers' && permessi.indexOf('write_customers') >= 0);
+    });
+    if (mancanti.length) {
+      throw new ErroreShopify('Shopify: all\'app mancano i permessi ' + mancanti.join(', '),
+        ['Aggiungili in una nuova versione dell\'app nel Dev Dashboard (Versions → Create version → Release) e approvali sul negozio']);
+    }
+    try {
+      graphql(Q_PROVA_CLIENTI, {});
+    } catch (e) {
+      throw new ErroreShopify('Shopify: l\'app non può leggere i dati dei clienti',
+        [].concat(e.dettagli && e.dettagli.length ? e.dettagli : [e.message],
+          'Nel Dev Dashboard abilita i dati protetti dei clienti (Name, Email, Phone, Address)'));
+    }
+    return { name: d.shop.name, myshopifyDomain: d.shop.myshopifyDomain, modo: modoAccesso(), permessi: permessi };
   }
 
   return {
@@ -2899,7 +2951,7 @@ function onOpen() {
     .addToUi();
 }
 
-/** Chiede le impostazioni una alla volta; lasciare vuoto = mantenere il valore attuale. */
+/** Chiede le impostazioni una alla volta; vuoto = mantenere il valore attuale, "-" = cancellarlo. */
 function configura() {
   var ui = SpreadsheetApp.getUi();
   Registro.documento(); // memorizza l'ID di questo Foglio come Registro
@@ -2909,16 +2961,18 @@ function configura() {
     [CHIAVI.SHOPIFY_SHOP, 'Dominio Shopify (es. nome-negozio.myshopify.com)', false],
     [CHIAVI.SHOPIFY_CLIENT_ID, 'Shopify: Client ID dell\'app (Dev Dashboard)', false],
     [CHIAVI.SHOPIFY_CLIENT_SECRET, 'Shopify: Client Secret dell\'app', true],
-    [CHIAVI.SHOPIFY_ACCESS_TOKEN, 'Shopify: token fisso (solo se NON usi Client ID/Secret)', true]
+    [CHIAVI.SHOPIFY_ACCESS_TOKEN, 'Shopify: token fisso shpat_… (solo se NON hai Client ID/Secret: di solito va lasciato vuoto)', true]
   ];
   for (var i = 0; i < voci.length; i++) {
     var chiave = voci[i][0];
     var attuale = Impostazioni.leggi(chiave, '');
     var mostra = attuale ? (voci[i][2] ? '(già impostata)' : attuale) : '(vuota)';
-    var r = ui.prompt('Configurazione ' + (i + 1) + '/' + voci.length, voci[i][1] + '\nValore attuale: ' + mostra + '\n\nLascia vuoto per non cambiarlo.', ui.ButtonSet.OK_CANCEL);
+    var r = ui.prompt('Configurazione ' + (i + 1) + '/' + voci.length, voci[i][1] + '\nValore attuale: ' + mostra +
+      '\n\nLascia vuoto per non cambiarlo, scrivi - per cancellarlo.', ui.ButtonSet.OK_CANCEL);
     if (r.getSelectedButton() !== ui.Button.OK) return;
     var valore = r.getResponseText().trim();
-    if (valore) Impostazioni.scrivi(chiave, valore);
+    if (valore === '-') Impostazioni.cancella(chiave);
+    else if (valore) Impostazioni.scrivi(chiave, valore);
   }
   if (!Impostazioni.leggi(CHIAVI.MODALITA, '')) Impostazioni.scrivi(CHIAVI.MODALITA, CONFIG.MODALITA_PREDEFINITA);
   ui.alert('Impostazioni salvate. Modalità attuale: ' + Impostazioni.modalita() + '.\nOra usa "2. Verifica connessioni".');
@@ -2941,9 +2995,11 @@ function verificaConnessioni() {
   }
   try {
     var negozio = Shopify.verifica();
-    righe.push('Shopify: OK (' + negozio.name + ' - ' + negozio.myshopifyDomain + ')');
+    righe.push('Shopify: OK (' + negozio.name + ' - ' + negozio.myshopifyDomain + ', accesso con ' +
+      (negozio.modo === 'CREDENZIALI' ? 'Client ID/Secret' : 'token fisso') + ', clienti leggibili)');
   } catch (e) {
-    righe.push('Shopify: ERRORE - ' + e.message + (e.dettagli ? ' ' + [].concat(e.dettagli).join('; ') : ''));
+    righe.push('Shopify: ERRORE - ' + e.message);
+    [].concat(e.dettagli || []).forEach(function (d) { righe.push('  → ' + d); });
   }
   try {
     Posta.creaEtichette();

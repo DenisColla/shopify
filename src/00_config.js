@@ -114,6 +114,10 @@ var Impostazioni = {
     this._proprieta().setProperty(chiave, String(valore));
   },
 
+  cancella: function (chiave) {
+    this._proprieta().deleteProperty(chiave);
+  },
+
   numero: function (chiave, predefinito) {
     var n = parseFloat(this.leggi(chiave, ''));
     return isNaN(n) ? predefinito : n;
