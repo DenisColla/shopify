@@ -23,11 +23,14 @@ Shopify non permette più di creare le vecchie "app personalizzate" dal pannello
 1. Vai su **dev.shopify.com** (Dev Dashboard) con l'account dell'organizzazione che possiede il negozio.
 2. **Create app** → nome "Anagrafica automatica".
 3. **Versions → Create version**:
+   - *App URL*: `https://shopify.dev/apps/default-app-home` (l'indirizzo predefinito di Shopify per le app senza
+     schermate: questa lavora solo in background);
    - *Scopes*: `read_customers`, `write_customers`;
    - lascia il resto com'è → **Release**.
-4. **API access → Protected customer data**: seleziona i campi *Name*, *Email*, *Phone*, *Address* con motivazione
-   "Creazione dell'anagrafica clienti dalle conferme d'ordine". Per le app usate solo sul proprio negozio non serve
-   una revisione.
+4. Se compare la voce **Protected customer data**: seleziona i campi *Name*, *Email*, *Phone*, *Address* con
+   motivazione "Creazione dell'anagrafica clienti dalle conferme d'ordine". Se non compare, salta questo passo: per le
+   app usate solo sui negozi della propria organizzazione l'accesso ai dati dei clienti è già disponibile, senza
+   revisione.
 5. **Install app** → scegli il negozio → **Install**.
 6. **Settings**: copia **Client ID** e **Client secret**.
 
