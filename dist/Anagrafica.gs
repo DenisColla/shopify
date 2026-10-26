@@ -1,6 +1,6 @@
 /**
  * MIGELINO - Anagrafica automatica da Gmail a Shopify
- * Versione 1.0.0. FILE GENERATO da tools/build.mjs: non modificarlo qui,
+ * Versione 1.1.0. FILE GENERATO da tools/build.mjs: non modificarlo qui,
  * modifica i file in src/ e rigenera. Istruzioni: docs/INSTALLAZIONE.md
  */
 // ===== 00_config.js =====
@@ -13,7 +13,7 @@
  */
 
 var CONFIG = {
-  VERSIONE: '1.0.0',
+  VERSIONE: '1.1.0',
 
   // Etichette Gmail (la parte prima di "/" crea il gruppo "Anagrafica").
   ETICHETTE: {
@@ -79,7 +79,22 @@ var CONFIG = {
     REGISTRO: 'Registro',
     COLLAUDO: 'Collaudo',
     COLLAUDO_CASI: 'Collaudo_casi',
-    RIEPILOGO: 'Riepilogo collaudo'
+    RIEPILOGO: 'Riepilogo collaudo',
+    CONTRATTI: 'Contratti'
+  },
+
+  // Contratto di vendita (testi fissi dell'intestazione; modificabili dalle Proprietà dello script)
+  CONTRATTO: {
+    VENDITORE: 'Migelino AG, Blegistrasse 13, CH-6340 Baar (Svizzera), operante in Italia come Migelino Italia.',
+    FIRMA_PER: 'Firma per Migelino AG',
+    TAGLINE: 'Soluzioni Acustiche Avanzate & Teleaudiologia',
+    PIE: 'Migelino AG | www.migelino.it | support@migelino.it | +39 0533 781000',
+    EMAIL_SUPPORTO: 'support@migelino.it',
+    SITO: 'www.migelino.it',
+    CARTELLA_DRIVE: 'Contratti',
+    PROVA_GIORNI: 30,
+    GARANZIA_MESI: 24,
+    MAX_RIGHE: 10
   }
 };
 
@@ -95,7 +110,15 @@ var CHIAVI = {
   EMAIL_UFFICIO_ORDINI: 'EMAIL_UFFICIO_ORDINI', // usata solo dal collaudo sullo storico
   SOGLIA_CONFERMA: 'SOGLIA_CONFERMA',
   SOGLIA_CAMPO: 'SOGLIA_CAMPO',
-  ULTIMO_CONTROLLO: 'ULTIMO_CONTROLLO'
+  ULTIMO_CONTROLLO: 'ULTIMO_CONTROLLO',
+  // Contratti (proprietà dello script, condivise)
+  CONTRATTI_CARTELLA_ID: 'CONTRATTI_CARTELLA_ID',     // cartella Drive dei PDF (creata da sola se vuota)
+  CONTRATTO_ULTIMO_NUMERO: 'CONTRATTO_ULTIMO_NUMERO', // es. 2026/0012
+  CONTRATTO_VENDITORE: 'CONTRATTO_VENDITORE',         // sovrascrive CONFIG.CONTRATTO.VENDITORE
+  CONTRATTO_PIE: 'CONTRATTO_PIE',                     // sovrascrive CONFIG.CONTRATTO.PIE
+  // Contratti (proprietà dell'utente: una per operatore)
+  FIRMATARIO_NOME: 'FIRMATARIO_NOME',
+  FIRMA_FILE_ID: 'FIRMA_FILE_ID'
 };
 
 var Impostazioni = {
@@ -2949,6 +2972,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Disattiva il controllo sulla mia casella', 'disattivaAutomazione')
     .addToUi();
+  ContrattoUi.menu(SpreadsheetApp.getUi());
 }
 
 /** Chiede le impostazioni una alla volta; vuoto = mantenere il valore attuale, "-" = cancellarlo. */
@@ -3087,3 +3111,1083 @@ function avviaCollaudo() {
 function continuaCollaudo() {
   Collaudo.continua();
 }
+
+// ===== 19_contratto_risorse.js =====
+/**
+ * Risorse grafiche del contratto di vendita. Il logo Migelino (pubblico) è
+ * incorporato come PNG in base64 così il PDF non dipende da file esterni.
+ * Le firme degli operatori NON stanno qui: restano su Drive (vedi ContrattoArchivio).
+ */
+
+var LOGO_MIGELINO = 'data:image/png;base64,' +
+  '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';
+
+// ===== 20_contratto_nucleo.js =====
+/**
+ * Nucleo del contratto di vendita: dati -> HTML, calcoli e testi.
+ *
+ * È codice "puro" (nessun servizio Google): la stessa funzione gira nello script
+ * (per il PDF) e nel browser (per l'anteprima dal vivo), dove viene inviata come
+ * sorgente con contrattoNucleo.toString(). Per questo NON deve usare nulla di
+ * definito fuori da sé: tutto ciò che serve arriva da `risorse`.
+ *
+ * Struttura dei dati di un contratto (vedi datiVuoti()):
+ *  numero, sottotitolo, preventivo {numero, data}, dataSottoscrizione,
+ *  cliente {titolo, nome, cognome, codiceFiscale, indirizzo, indirizzo2, cap, comune, provincia, telefono, email},
+ *  righe [{descrizione, dettaglio, quantita, prezzo, sconto, etichettaSconto, etichettaDopoSconto, omaggio}],
+ *  notaFornitura, spedizioneInclusa,
+ *  pagamento {modalita, finanziaria, rate, maggiorazione, acconto, testo},
+ *  consegna {diversa, destinatario, indirizzo, indirizzo2, cap, comune, provincia, note},
+ *  condizioni {prova, garanziaMesi, estensione, note}, luogo
+ */
+function contrattoNucleo(risorse) {
+  var R = risorse || {};
+  var LOGO = R.logo || '';
+  var VENDITORE = R.venditore || '';
+  var FIRMA_PER = R.firmaPer || 'Firma per Migelino';
+  var TAGLINE = R.tagline || '';
+  var PIE = R.pie || '';
+  var EMAIL_SUPPORTO = R.emailSupporto || '';
+  var SITO = R.sito || '';
+  var PROVA_GIORNI = R.provaGiorni || 30;
+  var GARANZIA_LEGALE_MESI = 24;
+  var GARANZIA_MESI = R.garanziaMesi || GARANZIA_LEGALE_MESI;
+
+  var MODALITA = [
+    { codice: 'BONIFICO', nome: 'Bonifico bancario anticipato' },
+    { codice: 'CARTA', nome: 'Carta o link di pagamento online' },
+    { codice: 'FINANZIAMENTO', nome: 'Finanziamento a rate con finanziaria (es. HeyLight)' },
+    { codice: 'RATE', nome: 'Rate mensili Migelino senza interessi' },
+    { codice: 'ALTRO', nome: 'Altro (testo libero)' }
+  ];
+  var TITOLI = ['Sig.', 'Sig.ra', 'Dott.', 'Dott.ssa', ''];
+  var RIGA_VUOTA = '____________________';
+
+  // ------------------------------------------------------------------ utilità
+  function str(x) {
+    return x === null || x === undefined ? '' : String(x).replace(/\s+/g, ' ').trim();
+  }
+
+  function testoMultiriga(x) {
+    return x === null || x === undefined ? '' : String(x).replace(/\r\n?/g, '\n').trim();
+  }
+
+  function bool(x, predefinito) {
+    if (x === undefined || x === null || x === '') return predefinito;
+    return x === true || x === 1 || x === 'true' || x === 'on' || x === '1';
+  }
+
+  /** Numero da testo in formato italiano ("3.580,00") o internazionale ("3580.5"). */
+  function num(x) {
+    if (typeof x === 'number') return isFinite(x) ? x : 0;
+    var s = String(x === null || x === undefined ? '' : x).replace(/[€\s]/g, '');
+    if (!s) return 0;
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    var n = parseFloat(s);
+    return isFinite(n) ? n : 0;
+  }
+
+  function intero(x, predefinito) {
+    var n = Math.round(num(x));
+    return n > 0 ? n : predefinito;
+  }
+
+  function arrotonda(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  /** 3580 -> "3.580,00 €", -200 -> "- 200,00 €" */
+  function euro(n) {
+    var v = arrotonda(num(n));
+    var negativo = v < 0;
+    v = Math.abs(v);
+    var parteIntera = Math.floor(v);
+    var centesimi = Math.round((v - parteIntera) * 100);
+    if (centesimi === 100) { parteIntera++; centesimi = 0; }
+    var s = String(parteIntera).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (negativo ? '- ' : '') + s + ',' + (centesimi < 10 ? '0' : '') + centesimi + ' €';
+  }
+
+  function percentuale(n) {
+    return String(arrotonda(num(n))).replace('.', ',') + '%';
+  }
+
+  /** "2026-09-28" -> "28/09/2026"; altri formati restano come sono. */
+  function dataIt(s) {
+    var t = str(s);
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : t;
+  }
+
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escMultiriga(s) {
+    return esc(testoMultiriga(s)).replace(/\n/g, '<br>');
+  }
+
+  function oVuoto(s) {
+    var t = str(s);
+    return t ? esc(t) : RIGA_VUOTA;
+  }
+
+  // --------------------------------------------------------------------- dati
+  function rigaVuota() {
+    return { descrizione: '', dettaglio: '', quantita: 1, prezzo: 0, sconto: 0, etichettaSconto: '', etichettaDopoSconto: '', omaggio: false };
+  }
+
+  function datiVuoti() {
+    return {
+      versione: 1,
+      numero: '',
+      sottotitolo: '',
+      preventivo: { numero: '', data: '' },
+      dataSottoscrizione: '',
+      cliente: { titolo: 'Sig.', nome: '', cognome: '', codiceFiscale: '', indirizzo: '', indirizzo2: '', cap: '', comune: '', provincia: '', telefono: '', email: '' },
+      righe: [rigaVuota()],
+      notaFornitura: '',
+      spedizioneInclusa: true,
+      pagamento: { modalita: 'BONIFICO', finanziaria: 'HeyLight', rate: 12, maggiorazione: 6, acconto: 0, testo: '' },
+      consegna: { diversa: false, destinatario: '', indirizzo: '', indirizzo2: '', cap: '', comune: '', provincia: '', note: '' },
+      condizioni: { prova: true, garanziaMesi: GARANZIA_MESI, estensione: '', note: '' },
+      luogo: ''
+    };
+  }
+
+  function normalizzaRiga(r) {
+    r = r || {};
+    return {
+      descrizione: str(r.descrizione),
+      dettaglio: str(r.dettaglio),
+      quantita: intero(r.quantita, 1),
+      prezzo: Math.max(0, arrotonda(num(r.prezzo))),
+      sconto: Math.max(0, arrotonda(num(r.sconto))),
+      etichettaSconto: str(r.etichettaSconto),
+      etichettaDopoSconto: str(r.etichettaDopoSconto),
+      omaggio: bool(r.omaggio, false)
+    };
+  }
+
+  function modalitaValida(codice) {
+    var c = str(codice).toUpperCase();
+    for (var i = 0; i < MODALITA.length; i++) if (MODALITA[i].codice === c) return c;
+    return 'BONIFICO';
+  }
+
+  /** Riporta qualsiasi oggetto (anche parziale o con testi al posto dei numeri) alla struttura completa. */
+  function normalizza(g) {
+    g = g || {};
+    var c = g.cliente || {};
+    var p = g.pagamento || {};
+    var k = g.consegna || {};
+    var z = g.condizioni || {};
+    var pv = g.preventivo || {};
+    var righe = (Array.isArray(g.righe) ? g.righe : []).map(normalizzaRiga);
+    if (!righe.length) righe = [rigaVuota()];
+    return {
+      versione: 1,
+      numero: str(g.numero),
+      sottotitolo: str(g.sottotitolo),
+      preventivo: { numero: str(pv.numero), data: str(pv.data) },
+      dataSottoscrizione: str(g.dataSottoscrizione),
+      cliente: {
+        titolo: c.titolo === undefined ? 'Sig.' : str(c.titolo),
+        nome: str(c.nome), cognome: str(c.cognome),
+        codiceFiscale: str(c.codiceFiscale).toUpperCase().replace(/[^A-Z0-9]/g, ''),
+        indirizzo: str(c.indirizzo), indirizzo2: str(c.indirizzo2),
+        cap: str(c.cap).replace(/\s/g, ''), comune: str(c.comune),
+        provincia: str(c.provincia).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
+        telefono: str(c.telefono), email: str(c.email).toLowerCase()
+      },
+      righe: righe,
+      notaFornitura: testoMultiriga(g.notaFornitura),
+      spedizioneInclusa: bool(g.spedizioneInclusa, true),
+      pagamento: {
+        modalita: modalitaValida(p.modalita),
+        finanziaria: str(p.finanziaria) || 'HeyLight',
+        rate: intero(p.rate, 12),
+        maggiorazione: p.maggiorazione === undefined || p.maggiorazione === null || p.maggiorazione === '' ? 6 : Math.max(0, num(p.maggiorazione)),
+        acconto: Math.max(0, arrotonda(num(p.acconto))),
+        testo: testoMultiriga(p.testo)
+      },
+      consegna: {
+        diversa: bool(k.diversa, false),
+        destinatario: str(k.destinatario),
+        indirizzo: str(k.indirizzo), indirizzo2: str(k.indirizzo2),
+        cap: str(k.cap).replace(/\s/g, ''), comune: str(k.comune),
+        provincia: str(k.provincia).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
+        note: str(k.note)
+      },
+      condizioni: {
+        prova: bool(z.prova, true),
+        garanziaMesi: intero(z.garanziaMesi, GARANZIA_MESI),
+        estensione: str(z.estensione),
+        note: testoMultiriga(z.note)
+      },
+      luogo: str(g.luogo)
+    };
+  }
+
+  function righeCompilate(dati) {
+    return dati.righe.filter(function (r) { return r.descrizione || r.prezzo > 0; });
+  }
+
+  function nomeCliente(dati) {
+    return str((dati.cliente.titolo ? dati.cliente.titolo + ' ' : '') + dati.cliente.nome + ' ' + dati.cliente.cognome);
+  }
+
+  // ------------------------------------------------------------------ calcoli
+  /** Divide un totale in n rate al centesimo: rate uguali arrotondate per eccesso, ultima di conguaglio. */
+  function pianoRate(totale, n) {
+    var t = arrotonda(num(totale));
+    n = intero(n, 1);
+    if (n === 1 || t <= 0) return { n: n, rata: t, ultima: t, uguali: true };
+    var rata = Math.ceil(t / n * 100) / 100;
+    var ultima = arrotonda(t - rata * (n - 1));
+    if (ultima <= 0) {
+      rata = Math.floor(t / n * 100) / 100;
+      ultima = arrotonda(t - rata * (n - 1));
+    }
+    return { n: n, rata: rata, ultima: ultima, uguali: Math.abs(rata - ultima) < 0.005 };
+  }
+
+  function testoPiano(piano) {
+    if (piano.uguali) return piano.n + (piano.n === 1 ? ' rata da ' : ' rate da ') + euro(piano.rata) + '.';
+    return (piano.n - 1) + (piano.n === 2 ? ' rata da ' : ' rate da ') + euro(piano.rata) + ' e ultima rata da ' + euro(piano.ultima) + '.';
+  }
+
+  function nomeModalita(codice) {
+    for (var i = 0; i < MODALITA.length; i++) if (MODALITA[i].codice === codice) return MODALITA[i].nome;
+    return codice;
+  }
+
+  /** Sezione 3: righe (etichetta, valore) e nota, secondo la modalità di pagamento. */
+  function calcolaPagamento(dati, totale) {
+    var p = dati.pagamento;
+    var acconto = Math.min(p.acconto, totale);
+    var residuo = arrotonda(totale - acconto);
+    var righe = [];
+    var nota = '';
+    var esito = { modalita: p.modalita, nome: nomeModalita(p.modalita), totale: totale, acconto: acconto, residuo: residuo, interessi: 0, daRimborsare: residuo, piano: null };
+
+    function importoEAcconto(etichettaResiduo) {
+      righe.push(['Importo della fornitura', euro(totale)]);
+      if (acconto > 0) {
+        righe.push(['Acconto alla conferma', euro(acconto)]);
+        righe.push([etichettaResiduo, euro(residuo)]);
+      }
+    }
+
+    if (p.modalita === 'BONIFICO') {
+      righe.push(['Modalità di pagamento concordata', 'bonifico bancario anticipato.']);
+      importoEAcconto('Saldo prima della spedizione');
+      nota = 'Le coordinate bancarie sono riportate nella conferma d\'ordine. La spedizione avviene dopo l\'accredito dell\'importo dovuto.';
+    } else if (p.modalita === 'CARTA') {
+      righe.push(['Modalità di pagamento concordata', 'pagamento online con carta tramite link di pagamento sicuro inviato via email.']);
+      importoEAcconto('Saldo prima della spedizione');
+      nota = 'Il link di pagamento viene inviato con la conferma d\'ordine. La spedizione avviene dopo l\'esito positivo del pagamento.';
+    } else if (p.modalita === 'FINANZIAMENTO') {
+      var n = Math.max(2, p.rate);
+      var interessi = arrotonda(residuo * p.maggiorazione / 100);
+      var daRimborsare = arrotonda(residuo + interessi);
+      var piano = pianoRate(daRimborsare, n);
+      esito.interessi = interessi;
+      esito.daRimborsare = daRimborsare;
+      esito.piano = piano;
+      righe.push(['Modalità di pagamento concordata', p.finanziaria + ' - ' + n + ' rate mensili.']);
+      importoEAcconto('Importo finanziato');
+      if (p.maggiorazione > 0) righe.push(['Interessi complessivi concordati (' + percentuale(p.maggiorazione) + ' dell\'importo' + (acconto > 0 ? ' finanziato' : '') + ')', euro(interessi)]);
+      else righe.push(['Interessi', 'nessuno (finanziamento a tasso zero).']);
+      righe.push(['Totale da rimborsare', euro(daRimborsare)]);
+      righe.push(['Piano di pagamento', testoPiano(piano)]);
+      nota = 'Finanziamento soggetto all\'approvazione della finanziaria. ' +
+        (p.maggiorazione > 0 ? 'Il ' + percentuale(p.maggiorazione) + ' è qui indicato come maggiorazione complessiva, in continuità con il preventivo, e non come TAN o TAEG. ' : '') +
+        'TAN, TAEG, decorrenza delle rate e condizioni definitive sono riportati nel contratto di credito sottoscritto con la finanziaria.';
+    } else if (p.modalita === 'RATE') {
+      var nr = Math.max(2, p.rate);
+      var pianoRateMigelino = pianoRate(residuo, nr);
+      esito.piano = pianoRateMigelino;
+      righe.push(['Modalità di pagamento concordata', 'pagamento dilazionato in ' + nr + ' rate mensili senza interessi, direttamente a Migelino.']);
+      importoEAcconto('Importo dilazionato');
+      righe.push(['Piano di pagamento', testoPiano(pianoRateMigelino)]);
+      nota = 'La prima rata è dovuta alla conferma dell\'ordine e le successive a cadenza mensile, senza interessi né costi aggiuntivi. ' +
+        'La proprietà degli apparecchi si trasferisce al pagamento dell\'ultima rata.';
+    } else {
+      righe.push(['Modalità di pagamento concordata', p.testo ? p.testo.replace(/\n+/g, ' ') : RIGA_VUOTA]);
+      importoEAcconto('Saldo');
+    }
+    esito.righe = righe;
+    esito.nota = nota;
+    return esito;
+  }
+
+  /** Righe da stampare nella sezione 2, totale, omaggi e pagamento. */
+  function calcola(datiGrezzi) {
+    var dati = normalizza(datiGrezzi);
+    var righe = [];
+    var totale = 0;
+    var omaggi = [];
+    righeCompilate(dati).forEach(function (r) {
+      var importo = arrotonda(r.quantita * r.prezzo);
+      righe.push({ testo: r.descrizione || RIGA_VUOTA, importo: importo, tipo: 'voce' });
+      if (r.dettaglio) righe.push({ testo: r.dettaglio, importo: null, tipo: 'dettaglio' });
+      if (r.omaggio) {
+        righe.push({ testo: r.etichettaSconto || 'Omaggio - sconto integrale', importo: -importo, tipo: 'omaggio' });
+        omaggi.push({ descrizione: r.descrizione, valore: importo });
+      } else if (r.sconto > 0) {
+        var sconto = Math.min(r.sconto, importo);
+        righe.push({ testo: r.etichettaSconto || 'Sconto', importo: -sconto, tipo: 'sconto' });
+        righe.push({ testo: r.etichettaDopoSconto || 'Prezzo dopo lo sconto', importo: arrotonda(importo - sconto), tipo: 'subtotale' });
+        totale += importo - sconto;
+      } else {
+        totale += importo;
+      }
+    });
+    totale = arrotonda(totale);
+    return { dati: dati, righe: righe, totale: totale, omaggi: omaggi, pagamento: calcolaPagamento(dati, totale) };
+  }
+
+  // -------------------------------------------------------------------- testi
+  function sottotitoloProposto(datiGrezzi) {
+    var c = calcola(datiGrezzi);
+    var voci = righeCompilate(c.dati).filter(function (r) { return !r.omaggio && r.descrizione; });
+    var parti = [];
+    if (voci.length) parti.push(voci[0].descrizione);
+    if (c.omaggi.length && c.omaggi[0].descrizione) parti.push(c.omaggi[0].descrizione + ' incluso gratuitamente');
+    return parti.join(' | ');
+  }
+
+  function notaFornituraProposta(datiGrezzi) {
+    var c = calcola(datiGrezzi);
+    var frasi = c.omaggi.map(function (o) {
+      return 'In omaggio: ' + (o.descrizione || 'accessorio') + ' (valore ' + euro(o.valore) + ', importo addebitato 0,00 €).';
+    });
+    if (c.dati.spedizioneInclusa) frasi.push('Non sono previsti ulteriori addebiti di spedizione per questa fornitura.');
+    return frasi.join(' ');
+  }
+
+  function indirizzoCompleto(x) {
+    var via = x.indirizzo + (x.indirizzo2 ? ', ' + x.indirizzo2 : '');
+    var localita = str(x.cap + ' ' + x.comune) + (x.provincia ? ' (' + x.provincia + ')' : '');
+    return str(via + (via && localita ? ', ' : '') + localita);
+  }
+
+  function testiCondizioni(c) {
+    var dati = c.dati;
+    var m = dati.pagamento.modalita;
+    var spedizione = m === 'FINANZIAMENTO' ? 'Per prodotti disponibili, spedizione entro 2-3 giorni lavorativi dall\'approvazione del finanziamento'
+      : m === 'RATE' ? 'Per prodotti disponibili, spedizione entro 2-3 giorni lavorativi dall\'incasso della prima rata'
+        : m === 'ALTRO' ? 'Per prodotti disponibili, spedizione entro 2-3 giorni lavorativi dal perfezionamento del pagamento concordato'
+          : 'Per prodotti disponibili e pagamento anticipato, spedizione entro 2-3 giorni lavorativi dall\'accredito';
+    var paragrafi = [];
+    paragrafi.push(['Configurazione e assistenza.', 'La fornitura comprende preprogrammazione su documentazione audiologica idonea, ' +
+      'ricevitori e cupoline necessari, kit iniziale di pulizia e filtri, regolazioni remote gratuite e illimitate durante la vita utile ' +
+      'degli apparecchi. Le funzioni via app richiedono uno smartphone compatibile.']);
+    paragrafi.push(['Conclusione e consegna.', 'L\'ordine è soggetto a conferma del venditore e verifica della documentazione audiologica. ' +
+      spedizione + ', salvo diversa data concordata. La proprietà si trasferisce al saldo.']);
+    if (dati.condizioni.prova) {
+      paragrafi.push(['Prova e restituzione.', 'È prevista una prova convenzionale di ' + PROVA_GIORNI + ' giorni dal ricevimento. La richiesta va inviata a ' +
+        (EMAIL_SUPPORTO || 'Migelino') + '; apparecchi e accessori' + (c.omaggi.length ? ', compreso l\'omaggio,' : '') +
+        ' vanno restituiti integri nella confezione originale con spedizione tracciabile e assicurata. Rimborso entro 14 giorni dal rientro. ' +
+        'Per dispositivi già provati prima dell\'ordine definitivo, si applica la disciplina specifica delle condizioni pubblicate, nei limiti di legge.']);
+    } else {
+      paragrafi.push(['Prova e restituzione.', 'Non è prevista una prova convenzionale oltre ai diritti riconosciuti dalla legge. ' +
+        'Resta fermo il diritto di recesso ove applicabile.']);
+    }
+    var mesi = dati.condizioni.garanziaMesi;
+    var garanzia = mesi > GARANZIA_LEGALE_MESI
+      ? 'Periodo di garanzia: ' + mesi + ' mesi dalla consegna, di cui ' + GARANZIA_LEGALE_MESI + ' di garanzia legale di conformità e i restanti di garanzia commerciale. '
+      : 'Periodo di garanzia: ' + GARANZIA_LEGALE_MESI + ' mesi dalla consegna (garanzia legale di conformità). ';
+    if (dati.condizioni.estensione) garanzia += 'Estensione concordata: ' + dati.condizioni.estensione + (/[.!?]$/.test(dati.condizioni.estensione) ? ' ' : '. ');
+    garanzia += 'Restano salvi tutti i diritti inderogabili del consumatore, inclusi i rimedi per difetti di conformità, il recesso ove applicabile e il foro competente previsto dalla legge.';
+    if (c.omaggi.length) garanzia += ' L\'omaggio non limita tali diritti.';
+    paragrafi.push(['Garanzia e diritti.', garanzia]);
+    if (dati.condizioni.note) paragrafi.push(['Condizioni particolari.', dati.condizioni.note]);
+    return paragrafi;
+  }
+
+  var TESTO_ACCETTAZIONE = 'Le parti accettano la fornitura e il prezzo sopra riportati. Le condizioni particolari di questo contratto prevalgono ' +
+    'su importi e opzioni del preventivo precedente. I dati mancanti vanno completati prima della firma. Il cliente riceve copia del contratto ' +
+    'e delle condizioni applicabili.';
+
+  function testoPrivacy() {
+    return 'Informativa privacy disponibile su ' + (SITO || 'richiesta') + '. L\'eventuale consenso al trattamento dei dati sanitari per il servizio remoto è raccolto separatamente.';
+  }
+
+  // --------------------------------------------------------------------- HTML
+  var CSS = [
+    '@page { size: A4; margin: 14mm 16mm 12mm 16mm; }',
+    'body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #222; margin: 0; padding: 0; line-height: 1.3; }',
+    'table { border-collapse: collapse; width: 100%; }',
+    'td { vertical-align: top; }',
+    '.pagina { page-break-after: always; }',
+    '.pagina.ultima { page-break-after: auto; }',
+    'table.testata td { vertical-align: bottom; padding: 0 0 4pt 0; }',
+    'table.testata td.tagline { font-size: 8.5pt; color: #666; padding-bottom: 10pt; }',
+    'table.testata td.logo { text-align: right; width: 70pt; }',
+    'table.testata img { width: 62pt; height: auto; }',
+    '.riga-teal { border-top: 2px solid #209cae; margin: 0 0 14pt 0; height: 0; }',
+    'h1 { font-size: 20pt; font-weight: bold; color: #333; margin: 0 0 3pt 0; }',
+    '.sottotitolo { font-size: 11pt; color: #333; margin: 0 0 10pt 0; }',
+    '.riferimenti { font-size: 9.5pt; margin: 0 0 6pt 0; }',
+    '.riferimenti p { margin: 0 0 2pt 0; }',
+    '.sezione { background: #f3f3f3; border-left: 4px solid #209cae; padding: 6pt 10pt; margin: 11pt 0 7pt 0; color: #209cae; font-weight: bold; font-size: 10.5pt; }',
+    '.campi p { margin: 0 0 3pt 0; }',
+    '.nota { font-size: 9.5pt; margin: 8pt 0 0 0; }',
+    'table.fornitura td { padding: 6pt 8pt; border-bottom: 1px solid #e4e8e8; }',
+    'table.fornitura td.importo { text-align: right; white-space: nowrap; width: 22%; }',
+    'table.fornitura tr.dettaglio td { padding-top: 4pt; padding-bottom: 4pt; color: #333; }',
+    'table.fornitura tr.subtotale td { font-weight: normal; }',
+    'table.totale { margin-top: 8pt; }',
+    'table.totale td { background: #209cae; color: #ffffff; font-weight: bold; font-size: 12pt; padding: 8pt 10pt; }',
+    'table.totale td.importo { text-align: right; white-space: nowrap; width: 30%; }',
+    '.para { margin: 0 0 6pt 0; text-align: left; }',
+    '.luogo { margin: 8pt 0 0 0; }',
+    'table.firme td { width: 50%; padding: 16pt 10pt 0 0; vertical-align: bottom; }',
+    'table.firme td.dx { padding: 16pt 0 0 10pt; }',
+    '.firma-img { height: 44pt; }',
+    '.firma-img img { height: 44pt; width: auto; }',
+    '.linea-firma { border-top: 1px solid #209cae; padding-top: 4pt; font-size: 9.5pt; margin-top: 4pt; }',
+    '.firmatario { color: #555; font-size: 8.5pt; }',
+    '.pie { margin-top: 12pt; border-top: 1px solid #cccccc; padding-top: 5pt; font-size: 8pt; color: #666; }',
+    '.pie td.dx { text-align: right; white-space: nowrap; }'
+  ].join('\n');
+
+  // Solo nel browser (anteprima e stampa): fogli A4 visibili, piè di pagina in fondo alla pagina.
+  var CSS_BROWSER = [
+    'body { background: #e5e7eb; padding: 10px 0; }',
+    '.pagina { position: relative; width: 178mm; min-height: 271mm; padding: 14mm 16mm 12mm 16mm; margin: 0 auto 12px auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); box-sizing: content-box; }',
+    '.pie { position: absolute; left: 16mm; right: 16mm; bottom: 10mm; margin-top: 0; }',
+    '@media print { body { background: #fff; padding: 0; } .pagina { box-shadow: none; margin: 0; width: 178mm; height: 271mm; min-height: 0; page-break-after: always; } .pagina.ultima { page-break-after: auto; } }'
+  ].join('\n');
+
+  function testata() {
+    return '<table class="testata"><tr><td class="tagline">' + esc(TAGLINE) + '</td><td class="logo">' +
+      (LOGO ? '<img src="' + LOGO + '" alt="Migelino">' : '') + '</td></tr></table><div class="riga-teal"></div>';
+  }
+
+  function pie(pagina, totali) {
+    return '<div class="pie"><table><tr><td>' + esc(PIE) + '</td><td class="dx">Pagina ' + pagina + ' di ' + totali + '</td></tr></table></div>';
+  }
+
+  function sezione(titolo) {
+    return '<div class="sezione">' + esc(titolo) + '</div>';
+  }
+
+  function campo(etichetta, valoreHtml) {
+    return '<p><b>' + esc(etichetta) + ':</b> ' + valoreHtml + '</p>';
+  }
+
+  function pagina1(c, opzioni) {
+    var dati = c.dati;
+    var h = '';
+    h += '<div class="pagina">' + testata();
+    h += '<h1>CONTRATTO DI VENDITA</h1>';
+    var sottotitolo = dati.sottotitolo || sottotitoloProposto(dati);
+    if (sottotitolo) h += '<div class="sottotitolo">' + esc(sottotitolo) + '</div>';
+    h += '<div class="riferimenti">';
+    if (dati.numero) h += '<p>Contratto n. <b>' + esc(dati.numero) + '</b></p>';
+    else if (opzioni.anteprima) h += '<p>Contratto n. <b>(assegnato alla generazione del PDF)</b></p>';
+    if (dati.preventivo.numero || dati.preventivo.data) {
+      h += '<p>Riferimento: preventivo' + (dati.preventivo.numero ? ' n. <b>' + esc(dati.preventivo.numero) + '</b>' : '') +
+        (dati.preventivo.data ? ' del ' + esc(dataIt(dati.preventivo.data)) : '') + '</p>';
+    }
+    h += '<p>Data di sottoscrizione: ' + (dati.dataSottoscrizione ? esc(dataIt(dati.dataSottoscrizione)) : RIGA_VUOTA) + '</p>';
+    h += '</div>';
+
+    h += sezione('1. PARTI E DATI DEL CLIENTE');
+    h += '<div class="campi">';
+    h += campo('Venditore', esc(VENDITORE));
+    h += campo('Cliente', oVuoto(nomeCliente(dati)));
+    h += campo('Codice fiscale', dati.cliente.codiceFiscale ? '<b>' + esc(dati.cliente.codiceFiscale) + '</b>' : RIGA_VUOTA);
+    h += campo('Indirizzo', oVuoto(dati.cliente.indirizzo + (dati.cliente.indirizzo2 ? ', ' + dati.cliente.indirizzo2 : '')));
+    h += campo('CAP / Comune / Provincia', oVuoto(str(dati.cliente.cap + ' ' + dati.cliente.comune) + (dati.cliente.provincia ? ' (' + dati.cliente.provincia + ')' : '')));
+    h += campo('Telefono', oVuoto(dati.cliente.telefono));
+    h += campo('E-mail', oVuoto(dati.cliente.email));
+    h += '</div>';
+
+    h += sezione('2. FORNITURA E PREZZO CONCORDATO');
+    h += '<table class="fornitura">';
+    if (!c.righe.length) h += '<tr><td>' + RIGA_VUOTA + '</td><td class="importo"></td></tr>';
+    c.righe.forEach(function (r) {
+      h += '<tr class="' + r.tipo + '"><td>' + esc(r.testo) + '</td><td class="importo">' + (r.importo === null ? '' : esc(euro(r.importo))) + '</td></tr>';
+    });
+    h += '</table>';
+    h += '<table class="totale"><tr><td>TOTALE CONTRATTO - IVA INCLUSA</td><td class="importo">' + esc(euro(c.totale)) + '</td></tr></table>';
+    var nota = dati.notaFornitura || notaFornituraProposta(dati);
+    if (nota) h += '<p class="nota">' + escMultiriga(nota) + '</p>';
+    h += pie(1, 2) + '</div>';
+    return h;
+  }
+
+  function pagina2(c, opzioni) {
+    var dati = c.dati;
+    var h = '<div class="pagina ultima">' + testata();
+    h += sezione('3. PAGAMENTO E CONSEGNA');
+    h += '<div class="campi">';
+    c.pagamento.righe.forEach(function (r) { h += campo(r[0], esc(r[1])); });
+    var consegna = dati.consegna.diversa ? dati.consegna : dati.cliente;
+    var destinatario = dati.consegna.destinatario || str(dati.cliente.nome + ' ' + dati.cliente.cognome);
+    h += '<p><b>Indirizzo di consegna:</b> ' + oVuoto(indirizzoCompleto(consegna)) + '. Nome destinatario: ' + oVuoto(destinatario) +
+      (dati.consegna.note ? '. ' + esc(dati.consegna.note) : '') + '</p>';
+    if (c.pagamento.nota) h += '<p class="nota">' + esc(c.pagamento.nota) + '</p>';
+    h += '</div>';
+
+    h += sezione('4. SERVIZI E CONDIZIONI DELLA FORNITURA');
+    testiCondizioni(c).forEach(function (p) {
+      h += '<p class="para"><b>' + esc(p[0]) + '</b> ' + escMultiriga(p[1]) + '</p>';
+    });
+
+    h += sezione('5. ACCETTAZIONE E FIRME');
+    h += '<p class="para">' + esc(TESTO_ACCETTAZIONE) + '</p>';
+    h += '<p class="para">' + esc(testoPrivacy()) + '</p>';
+    h += '<p class="luogo">Luogo e data: ' + (dati.luogo ? esc(dati.luogo) + ', ' : '') + '______________________________</p>';
+    var firma = opzioni.firma || {};
+    h += '<table class="firme"><tr>';
+    h += '<td><div class="firma-img"></div><div class="linea-firma">Firma del cliente</div></td>';
+    h += '<td class="dx"><div class="firma-img">' + (firma.immagine ? '<img src="' + esc(firma.immagine) + '" alt="Firma">' : '') + '</div>';
+    h += '<div class="linea-firma">' + esc(FIRMA_PER) + (firma.nome ? '<br><span class="firmatario">' + esc(firma.nome) + '</span>' : '') + '</div></td>';
+    h += '</tr></table>';
+    h += pie(2, 2) + '</div>';
+    return h;
+  }
+
+  /**
+   * HTML completo del contratto.
+   * opzioni.anteprima: true nel browser (fogli visibili, avvisi sui campi non ancora assegnati)
+   * opzioni.browser: true per anteprima e stampa dal browser (CSS aggiuntivo)
+   * opzioni.firma: { immagine: dataURI, nome: 'Nome Cognome' } firma dell'operatore
+   */
+  function html(datiGrezzi, opzioni) {
+    opzioni = opzioni || {};
+    var c = calcola(datiGrezzi);
+    var titolo = 'Contratto di vendita' + (c.dati.cliente.cognome ? ' - ' + c.dati.cliente.cognome : '');
+    return '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><title>' + esc(titolo) + '</title>' +
+      '<style>' + CSS + (opzioni.browser || opzioni.anteprima ? '\n' + CSS_BROWSER : '') + '</style></head><body>' +
+      pagina1(c, opzioni) + pagina2(c, opzioni) + '</body></html>';
+  }
+
+  return {
+    MODALITA: MODALITA,
+    TITOLI: TITOLI,
+    datiVuoti: datiVuoti,
+    rigaVuota: rigaVuota,
+    normalizza: normalizza,
+    calcola: calcola,
+    pianoRate: pianoRate,
+    html: html,
+    sottotitoloProposto: sottotitoloProposto,
+    notaFornituraProposta: notaFornituraProposta,
+    nomeCliente: nomeCliente,
+    euro: euro,
+    num: num,
+    dataIt: dataIt,
+    esc: esc
+  };
+}
+
+/** Risorse del nucleo lato script (logo e testi fissi, con le eventuali sovrascritture dalle Proprietà). */
+function contrattoRisorse() {
+  var c = CONFIG.CONTRATTO;
+  return {
+    logo: typeof LOGO_MIGELINO === 'string' ? LOGO_MIGELINO : '',
+    venditore: Impostazioni.leggi(CHIAVI.CONTRATTO_VENDITORE, c.VENDITORE),
+    firmaPer: c.FIRMA_PER,
+    tagline: c.TAGLINE,
+    pie: Impostazioni.leggi(CHIAVI.CONTRATTO_PIE, c.PIE),
+    emailSupporto: c.EMAIL_SUPPORTO,
+    sito: c.SITO,
+    provaGiorni: c.PROVA_GIORNI,
+    garanziaMesi: c.GARANZIA_MESI
+  };
+}
+
+// ===== 21_contratto_controlli.js =====
+/**
+ * Controlli sui dati del contratto prima di generare il PDF (solo lato script:
+ * usa codice fiscale, comuni, telefono e maiuscole dei moduli esistenti).
+ *
+ *  errori  = bloccanti: il PDF non viene generato
+ *  avvisi  = da controllare: il PDF viene generato comunque
+ *  dati    = dati normalizzati (maiuscole, comune ufficiale, telefono) da usare per il PDF
+ */
+
+var ContrattoControlli = (function () {
+  var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function nucleo() {
+    return contrattoNucleo(contrattoRisorse());
+  }
+
+  /** Data accettata in formato ISO (2026-09-28) o italiano (28/09/2026); restituisce ISO o '' se non riconosciuta. */
+  function dataIso(testo) {
+    var t = String(testo || '').trim();
+    if (!t) return '';
+    var iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+    var ita = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(t);
+    var a, m, g;
+    if (iso) { a = Number(iso[1]); m = Number(iso[2]); g = Number(iso[3]); }
+    else if (ita) { a = Number(ita[3]); m = Number(ita[2]); g = Number(ita[1]); }
+    else return null;
+    var d = new Date(Date.UTC(a, m - 1, g));
+    if (d.getUTCFullYear() !== a || d.getUTCMonth() !== m - 1 || d.getUTCDate() !== g) return null; // es. 31/02
+    return a + '-' + (m < 10 ? '0' : '') + m + '-' + (g < 10 ? '0' : '') + g;
+  }
+
+  /** "+393331234567" -> "333 123 4567" (cellulari); fissi "+39 0612345678" (il prefisso ha lunghezza variabile); altri invariati. */
+  function telefonoLeggibile(e164) {
+    var m = /^\+39(3\d{2})(\d{3})(\d{3,4})$/.exec(e164);
+    if (m) return m[1] + ' ' + m[2] + ' ' + m[3];
+    var f = /^\+39(0\d{5,10})$/.exec(e164);
+    if (f) return '+39 ' + f[1];
+    return e164;
+  }
+
+  function controllaIndirizzo(x, prefisso, bloccante, errori, avvisi) {
+    var mancanti = bloccante ? errori : avvisi;
+    if (!x.indirizzo) mancanti.push(prefisso + 'indirizzo mancante');
+    else if (!Indirizzi.separaCivico(x.indirizzo, '').civico) avvisi.push(prefisso + 'numero civico non riconosciuto nell\'indirizzo "' + x.indirizzo + '"');
+    if (!/^\d{5}$/.test(x.cap)) mancanti.push(prefisso + 'CAP mancante o non valido (5 cifre)');
+    if (!x.comune) mancanti.push(prefisso + 'comune mancante');
+    if (!x.provincia) mancanti.push(prefisso + 'provincia mancante (sigla, es. NA)');
+    else if (!Comuni.siglaValida(x.provincia)) errori.push(prefisso + 'provincia "' + x.provincia + '" non valida');
+    var provinciaOk = x.provincia && Comuni.siglaValida(x.provincia);
+    if (/^\d{5}$/.test(x.cap) && provinciaOk && Comuni.capCoerente(x.cap, x.provincia) === false) {
+      errori.push(prefisso + 'CAP ' + x.cap + ' non compatibile con la provincia ' + x.provincia);
+    }
+    var comune = x.comune && provinciaOk ? Comuni.trova(x.comune, x.provincia) : null;
+    if (comune) {
+      x.comune = comune.nome; // nome ufficiale
+    } else if (x.comune) {
+      if (provinciaOk) avvisi.push(prefisso + 'comune "' + x.comune + '" non trovato in tabella per la provincia ' + x.provincia + ': controlla il nome (frazione?)');
+      x.comune = Testo.maiuscoleIndirizzo(x.comune);
+    }
+    if (x.indirizzo) x.indirizzo = Testo.maiuscoleIndirizzo(x.indirizzo);
+  }
+
+  function valida(datiGrezzi) {
+    var n = nucleo();
+    var dati = n.normalizza(datiGrezzi);
+    var errori = [];
+    var avvisi = [];
+    var c = dati.cliente;
+
+    // Cliente
+    c.nome = Testo.maiuscoleNome(c.nome);
+    c.cognome = Testo.maiuscoleNome(c.cognome);
+    if (!c.nome) errori.push('Nome del cliente mancante');
+    if (!c.cognome) errori.push('Cognome del cliente mancante');
+    if (c.codiceFiscale) {
+      if (!CodiceFiscale.valido(c.codiceFiscale)) {
+        errori.push('Codice fiscale "' + c.codiceFiscale + '" non valido (formato o carattere di controllo)');
+      } else if (c.nome && c.cognome) {
+        var coerenza = CodiceFiscale.verificaCoerenza(c.codiceFiscale, { nome: c.nome, cognome: c.cognome });
+        if (coerenza.cognome === false || coerenza.nome === false) {
+          avvisi.push('Il codice fiscale non corrisponde a nome e cognome indicati: controlla prima di firmare');
+        }
+      }
+    } else {
+      avvisi.push('Codice fiscale mancante: nel PDF resta una riga da completare a mano prima della firma');
+    }
+    controllaIndirizzo(c, '', true, errori, avvisi);
+    if (c.telefono) {
+      var e164 = Telefono.normalizza(c.telefono, 'IT');
+      if (e164) c.telefono = telefonoLeggibile(e164);
+      else avvisi.push('Telefono "' + c.telefono + '" non riconosciuto: viene stampato così com\'è');
+    } else {
+      avvisi.push('Telefono mancante');
+    }
+    if (c.email) {
+      if (!EMAIL.test(c.email)) avvisi.push('E-mail "' + c.email + '" non sembra valida');
+    } else {
+      avvisi.push('E-mail mancante: senza email non si può preparare la bozza di invio');
+    }
+
+    // Date
+    [['preventivo', 'data', 'Data del preventivo'], [null, 'dataSottoscrizione', 'Data di sottoscrizione']].forEach(function (v) {
+      var contenitore = v[0] ? dati[v[0]] : dati;
+      var iso = dataIso(contenitore[v[1]]);
+      if (iso === null) avvisi.push(v[2] + ' "' + contenitore[v[1]] + '" non riconosciuta (usa gg/mm/aaaa): viene stampata così com\'è');
+      else if (iso) contenitore[v[1]] = iso;
+    });
+
+    // Fornitura
+    var calcolo = n.calcola(dati);
+    var compilate = dati.righe.filter(function (r) { return r.descrizione || r.prezzo > 0; });
+    if (!compilate.length) errori.push('Inserisci almeno una voce di fornitura');
+    compilate.forEach(function (r, i) {
+      var importo = r.quantita * r.prezzo;
+      if (!r.descrizione) errori.push('Voce ' + (i + 1) + ': descrizione mancante');
+      if (r.prezzo <= 0 && !r.omaggio) avvisi.push('Voce ' + (i + 1) + ' "' + r.descrizione + '": prezzo pari a zero');
+      if (!r.omaggio && r.sconto > importo) avvisi.push('Voce ' + (i + 1) + ': sconto superiore all\'importo, limitato a ' + n.euro(importo));
+      if (r.omaggio && r.prezzo <= 0) avvisi.push('Voce ' + (i + 1) + ': omaggio senza valore indicato');
+    });
+    if (compilate.length && calcolo.totale <= 0) errori.push('Il totale del contratto è pari a zero');
+
+    // Pagamento
+    var p = dati.pagamento;
+    if ((p.modalita === 'FINANZIAMENTO' || p.modalita === 'RATE') && p.rate < 2) errori.push('Numero di rate non valido (minimo 2)');
+    if (p.modalita === 'FINANZIAMENTO' && p.maggiorazione > 30) avvisi.push('Maggiorazione del finanziamento superiore al 30%: controlla');
+    if (p.modalita === 'FINANZIAMENTO' && !p.finanziaria) errori.push('Indica il nome della finanziaria');
+    if (p.modalita === 'ALTRO' && !p.testo) errori.push('Descrivi la modalità di pagamento (campo "Altro")');
+    if (p.acconto > 0 && calcolo.totale > 0 && p.acconto >= calcolo.totale) errori.push('L\'acconto è pari o superiore al totale del contratto');
+
+    // Consegna
+    if (dati.consegna.diversa) controllaIndirizzo(dati.consegna, 'Consegna: ', true, errori, avvisi);
+    if (dati.consegna.destinatario) dati.consegna.destinatario = Testo.maiuscoleNome(dati.consegna.destinatario);
+
+    // Condizioni
+    if (dati.condizioni.garanziaMesi < 24) {
+      avvisi.push('Garanzia inferiore a 24 mesi: nel PDF viene indicata comunque la garanzia legale di 24 mesi');
+      dati.condizioni.garanziaMesi = 24;
+    }
+
+    return { errori: errori, avvisi: avvisi, dati: dati, totale: calcolo.totale };
+  }
+
+  return { valida: valida, dataIso: dataIso, telefonoLeggibile: telefonoLeggibile };
+})();
+
+// ===== 22_contratto_archivio.js =====
+/**
+ * Archivio dei contratti: numero progressivo, PDF su Drive, riga nel foglio
+ * "Contratti", bozza Gmail facoltativa, firma dell'operatore.
+ *
+ * La firma (immagine PNG/JPG) resta su Drive: ogni operatore imposta nome e
+ * file dal menu "Contratti > Imposta il mio nome e la mia firma"; i valori
+ * stanno nelle Proprietà dell'utente, quindi ognuno vede solo la propria.
+ */
+
+var ContrattoArchivio = (function () {
+  var INTESTAZIONI = ['Data', 'Numero', 'Operatore', 'Cliente', 'Email', 'Telefono', 'Totale', 'Pagamento', 'PDF',
+    'Preventivo', 'Bozza email', 'Stato', 'Dati'];
+  var FUSO = 'Europe/Rome';
+
+  function nucleo() {
+    return contrattoNucleo(contrattoRisorse());
+  }
+
+  function proprietaUtente() {
+    return PropertiesService.getUserProperties();
+  }
+
+  /** Estrae l'ID da un link di Drive (file o cartella) oppure restituisce il testo com'è. */
+  function idDrive(testo) {
+    var t = String(testo || '').trim();
+    var m = /\/(?:d|folders)\/([A-Za-z0-9_-]{10,})/.exec(t) || /[?&]id=([A-Za-z0-9_-]{10,})/.exec(t);
+    return m ? m[1] : t;
+  }
+
+  function operatore() {
+    var u = proprietaUtente();
+    return {
+      email: Posta.casella(),
+      nome: u.getProperty(CHIAVI.FIRMATARIO_NOME) || '',
+      firmaFileId: u.getProperty(CHIAVI.FIRMA_FILE_ID) || ''
+    };
+  }
+
+  /** Nome e firma (immagine in base64) dell'operatore corrente; immagine vuota se non impostata o non leggibile. */
+  function firma() {
+    var op = operatore();
+    var f = { nome: op.nome, immagine: '', errore: '' };
+    if (op.firmaFileId) {
+      try {
+        var blob = DriveApp.getFileById(op.firmaFileId).getBlob();
+        var tipo = blob.getContentType() || 'image/png';
+        if (!/^image\//.test(tipo)) throw new Error('il file non è un\'immagine (' + tipo + ')');
+        f.immagine = 'data:' + tipo + ';base64,' + Utilities.base64Encode(blob.getBytes());
+      } catch (e) {
+        f.errore = 'Firma non leggibile da Drive: ' + (e && e.message ? e.message : e);
+      }
+    }
+    return f;
+  }
+
+  function impostaFirma(nome, fileIdOUrl) {
+    var u = proprietaUtente();
+    if (nome !== null && nome !== undefined) {
+      if (nome === '-' || nome === '') u.deleteProperty(CHIAVI.FIRMATARIO_NOME);
+      else u.setProperty(CHIAVI.FIRMATARIO_NOME, Testo.spazi(nome));
+    }
+    if (fileIdOUrl !== null && fileIdOUrl !== undefined) {
+      var id = idDrive(fileIdOUrl);
+      if (id === '-' || id === '') u.deleteProperty(CHIAVI.FIRMA_FILE_ID);
+      else u.setProperty(CHIAVI.FIRMA_FILE_ID, id);
+    }
+    return firma();
+  }
+
+  /** Numero progressivo per anno (es. 2026/0012), sotto blocco condiviso tra le caselle. */
+  function prossimoNumero(adesso) {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+    try {
+      var anno = Utilities.formatDate(adesso || new Date(), FUSO, 'yyyy');
+      var m = /^(\d{4})\/(\d+)$/.exec(Impostazioni.leggi(CHIAVI.CONTRATTO_ULTIMO_NUMERO, ''));
+      var n = m && m[1] === anno ? Number(m[2]) + 1 : 1;
+      var cifre = String(n);
+      var numero = anno + '/' + (cifre.length < 4 ? ('0000' + cifre).slice(-4) : cifre);
+      Impostazioni.scrivi(CHIAVI.CONTRATTO_ULTIMO_NUMERO, numero);
+      return numero;
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  /** Cartella dei contratti (creata accanto al Foglio se non impostata) e sottocartella dell'anno. */
+  function cartella(anno) {
+    var id = Impostazioni.leggi(CHIAVI.CONTRATTI_CARTELLA_ID, '');
+    var radice = null;
+    if (id) {
+      try { radice = DriveApp.getFolderById(id); } catch (e) { radice = null; }
+    }
+    if (!radice) {
+      var genitori = DriveApp.getFileById(Registro.documento().getId()).getParents();
+      var base = genitori.hasNext() ? genitori.next() : DriveApp.getRootFolder();
+      var esistenti = base.getFoldersByName(CONFIG.CONTRATTO.CARTELLA_DRIVE);
+      radice = esistenti.hasNext() ? esistenti.next() : base.createFolder(CONFIG.CONTRATTO.CARTELLA_DRIVE);
+      Impostazioni.scrivi(CHIAVI.CONTRATTI_CARTELLA_ID, radice.getId());
+    }
+    if (!anno) return radice;
+    var sotto = radice.getFoldersByName(String(anno));
+    return sotto.hasNext() ? sotto.next() : radice.createFolder(String(anno));
+  }
+
+  function impostaCartella(idOUrl) {
+    var id = idDrive(idOUrl);
+    var c = DriveApp.getFolderById(id); // errore se non accessibile
+    Impostazioni.scrivi(CHIAVI.CONTRATTI_CARTELLA_ID, c.getId());
+    return { id: c.getId(), nome: c.getName(), url: c.getUrl() };
+  }
+
+  function pulisciNome(s) {
+    return Testo.rimuoviAccenti(s).replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  /** Stessa convenzione dei preventivi già su Drive: Cognome_Contratto_Nome_AAAA-MM-GG */
+  function nomeFile(dati, data) {
+    var giorno = Utilities.formatDate(data, FUSO, 'yyyy-MM-dd');
+    return [pulisciNome(dati.cliente.cognome) || 'Cliente', 'Contratto', pulisciNome(dati.cliente.nome) || 'Senza-nome', giorno].join('_');
+  }
+
+  function pdfDaHtml(html, nome) {
+    return Utilities.newBlob(html, 'text/html', nome + '.html').getAs('application/pdf').setName(nome + '.pdf');
+  }
+
+  function foglio() {
+    return Registro.foglio(CONFIG.FOGLI.CONTRATTI, INTESTAZIONI);
+  }
+
+  function bozzaEmail(dati, numero, pdf, sottotitolo, nomeOperatore) {
+    if (!dati.cliente.email) return null;
+    var c = CONFIG.CONTRATTO;
+    var oggetto = 'Contratto di vendita n. ' + numero + ' - Migelino Italia';
+    var corpo = 'Gentile ' + Testo.spazi((dati.cliente.titolo ? dati.cliente.titolo + ' ' : '') + dati.cliente.cognome) + ',\n\n' +
+      'in allegato trova il contratto di vendita n. ' + numero + (sottotitolo ? ' (' + sottotitolo + ')' : '') + '.\n' +
+      'La preghiamo di controllare i dati, firmare dove indicato e rispedircelo via email: va bene anche una foto leggibile delle due pagine.\n\n' +
+      'Restiamo a disposizione per qualsiasi chiarimento.\n\nCordiali saluti\n' + (nomeOperatore ? nomeOperatore + '\n' : '') +
+      'Migelino Italia\n' + c.SITO + ' | ' + c.EMAIL_SUPPORTO;
+    var bozza = GmailApp.createDraft(dati.cliente.email, oggetto, corpo, { attachments: [pdf], name: 'Migelino Italia' });
+    var idMessaggio = bozza.getMessageId ? bozza.getMessageId() : '';
+    return { id: bozza.getId(), url: 'https://mail.google.com/mail/' + (Posta.casella() ? '?authuser=' + encodeURIComponent(Posta.casella()) : 'u/0/') + '#drafts' + (idMessaggio ? '/' + idMessaggio : '') };
+  }
+
+  /**
+   * Genera il contratto: controlli, numero, PDF su Drive, riga nel foglio "Contratti",
+   * bozza Gmail se opzioni.bozzaEmail. Restituisce { numero, pdfUrl, pdfNome, totale, bozzaUrl, avvisi }.
+   * Con errori bloccanti lancia un Error con la proprietà `errori`.
+   */
+  function genera(datiGrezzi, opzioni) {
+    opzioni = opzioni || {};
+    var controllo = ContrattoControlli.valida(datiGrezzi);
+    if (controllo.errori.length) {
+      var errore = new Error('Contratto non generato. ' + controllo.errori.join('; '));
+      errore.errori = controllo.errori;
+      throw errore;
+    }
+    var dati = controllo.dati;
+    var avvisi = controllo.avvisi.slice();
+    var n = nucleo();
+    var adesso = new Date();
+    var f = firma();
+    if (f.errore) avvisi.push(f.errore);
+    if (!f.immagine) avvisi.push('Nessuna firma impostata per questo operatore: lo spazio "' + CONFIG.CONTRATTO.FIRMA_PER + '" resta da firmare a mano');
+    var op = operatore();
+
+    dati.numero = prossimoNumero(adesso);
+    var html = n.html(dati, { firma: { nome: f.nome, immagine: f.immagine } });
+    var nome = nomeFile(dati, adesso);
+    var pdf = pdfDaHtml(html, nome);
+    var file = cartella(Utilities.formatDate(adesso, FUSO, 'yyyy')).createFile(pdf);
+    var calcolo = n.calcola(dati);
+    var sottotitolo = dati.sottotitolo || n.sottotitoloProposto(dati);
+    var esito = { numero: dati.numero, pdfUrl: file.getUrl(), pdfNome: file.getName(), totale: calcolo.totale, bozzaUrl: '', avvisi: avvisi };
+
+    if (opzioni.bozzaEmail) {
+      try {
+        var b = bozzaEmail(dati, dati.numero, pdf, sottotitolo, f.nome || op.email);
+        if (b) esito.bozzaUrl = b.url;
+        else avvisi.push('Bozza email non creata: manca l\'email del cliente');
+      } catch (e) {
+        avvisi.push('Bozza email non creata: ' + (e && e.message ? e.message : e));
+      }
+    }
+
+    foglio().appendRow([
+      adesso, dati.numero, op.email, n.nomeCliente(dati), dati.cliente.email, dati.cliente.telefono,
+      calcolo.totale, calcolo.pagamento.nome, esito.pdfUrl, dati.preventivo.numero, esito.bozzaUrl,
+      'Generato', JSON.stringify(dati)
+    ]);
+    return esito;
+  }
+
+  /** Dati salvati nella riga selezionata del foglio "Contratti" (per riaprire un contratto), o null. */
+  function riapriDaRigaAttiva() {
+    var f = SpreadsheetApp.getActiveSheet();
+    if (!f || f.getName() !== CONFIG.FOGLI.CONTRATTI) return null;
+    var riga = f.getActiveRange() ? f.getActiveRange().getRow() : 0;
+    if (riga < 2) return null;
+    var colonna = INTESTAZIONI.indexOf('Dati') + 1;
+    var testo = f.getRange(riga, colonna).getValue();
+    try {
+      var dati = JSON.parse(String(testo || ''));
+      return dati && typeof dati === 'object' ? dati : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return {
+    INTESTAZIONI: INTESTAZIONI,
+    operatore: operatore,
+    firma: firma,
+    impostaFirma: impostaFirma,
+    prossimoNumero: prossimoNumero,
+    cartella: cartella,
+    impostaCartella: impostaCartella,
+    nomeFile: nomeFile,
+    pdfDaHtml: pdfDaHtml,
+    genera: genera,
+    riapriDaRigaAttiva: riapriDaRigaAttiva,
+    idDrive: idDrive
+  };
+})();
+
+// ===== 23_contratto_ui.js =====
+/**
+ * Finestra "Contratto di vendita" nel Foglio: menu, pagina HTML (src/html/contratto.html,
+ * incorporata dal build come HTML_CONTRATTO) e funzioni chiamate dalla pagina.
+ *
+ * La pagina riceve il sorgente di contrattoNucleo() e lo esegue nel browser: l'anteprima
+ * si aggiorna senza chiamare lo script. I controlli e il PDF restano lato script.
+ */
+
+var ContrattoUi = (function () {
+  function menu(ui) {
+    ui.createMenu('Contratti')
+      .addItem('Nuovo contratto di vendita', 'apriContratto')
+      .addItem('Riapri il contratto della riga selezionata', 'riapriContratto')
+      .addSeparator()
+      .addItem('Imposta il mio nome e la mia firma', 'impostaFirmaContratto')
+      .addItem('Imposta la cartella Drive dei contratti', 'impostaCartellaContratti')
+      .addToUi();
+  }
+
+  /** JSON sicuro dentro un <script>: "</" non deve chiudere il blocco. */
+  function jsonPerPagina(valore) {
+    return JSON.stringify(valore === undefined ? null : valore).replace(/<\//g, '<\\/');
+  }
+
+  function pagina(datiIniziali) {
+    var op = ContrattoArchivio.operatore();
+    var t = HtmlService.createTemplate(HTML_CONTRATTO);
+    t.nucleoSorgente = contrattoNucleo.toString();
+    t.risorseJson = jsonPerPagina(contrattoRisorse());
+    t.datiJson = jsonPerPagina(datiIniziali || null);
+    t.operatoreJson = jsonPerPagina({ email: op.email, nome: op.nome, haFirma: !!op.firmaFileId });
+    t.versione = CONFIG.VERSIONE;
+    return t.evaluate().setTitle('Contratto di vendita');
+  }
+
+  function mostra(dati, titolo) {
+    SpreadsheetApp.getUi().showModalDialog(pagina(dati).setWidth(1500).setHeight(900), titolo || 'Nuovo contratto di vendita');
+  }
+
+  return { menu: menu, pagina: pagina, mostra: mostra };
+})();
+
+// ---------------------------------------------------------------- voci di menu
+function apriContratto() {
+  ContrattoUi.mostra(null, 'Nuovo contratto di vendita');
+}
+
+function riapriContratto() {
+  var dati = ContrattoArchivio.riapriDaRigaAttiva();
+  if (!dati) {
+    SpreadsheetApp.getUi().alert('Seleziona prima una riga del foglio "' + CONFIG.FOGLI.CONTRATTI + '" (colonna "Dati" compilata).');
+    return;
+  }
+  ContrattoUi.mostra(dati, 'Contratto ' + (dati.numero ? dati.numero + ' ' : '') + '(nuova versione)');
+}
+
+function impostaFirmaContratto() {
+  var ui = SpreadsheetApp.getUi();
+  var attuale = ContrattoArchivio.operatore();
+  var r1 = ui.prompt('Nome e cognome sotto la firma',
+    'Compare nel contratto sotto "' + CONFIG.CONTRATTO.FIRMA_PER + '".\nValore attuale: ' + (attuale.nome || '(vuoto)') +
+    '\n\nLascia vuoto per non cambiarlo, scrivi - per cancellarlo.', ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  var r2 = ui.prompt('Immagine della firma',
+    'Link (o ID) del file PNG/JPG su Drive con la tua firma, su sfondo bianco. Il file deve essere leggibile dal tuo account.' +
+    '\nValore attuale: ' + (attuale.firmaFileId || '(nessuna firma)') +
+    '\n\nLascia vuoto per non cambiarlo, scrivi - per cancellarlo.', ui.ButtonSet.OK_CANCEL);
+  if (r2.getSelectedButton() !== ui.Button.OK) return;
+  var nome = r1.getResponseText().trim();
+  var file = r2.getResponseText().trim();
+  var esito = ContrattoArchivio.impostaFirma(nome === '' ? null : nome, file === '' ? null : file);
+  ui.alert('Firma: ' + (esito.immagine ? 'OK, immagine letta da Drive' : esito.errore || 'nessuna immagine impostata') +
+    '\nNome: ' + (esito.nome || '(vuoto)'));
+}
+
+function impostaCartellaContratti() {
+  var ui = SpreadsheetApp.getUi();
+  var attuale = Impostazioni.leggi(CHIAVI.CONTRATTI_CARTELLA_ID, '');
+  var r = ui.prompt('Cartella Drive dei contratti',
+    'Link (o ID) della cartella in cui salvare i PDF; viene creata una sottocartella per anno.\n' +
+    'Valore attuale: ' + (attuale || '(automatica: cartella "' + CONFIG.CONTRATTO.CARTELLA_DRIVE + '" accanto a questo Foglio)') +
+    '\n\nLascia vuoto per non cambiarlo.', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK || !r.getResponseText().trim()) return;
+  try {
+    var c = ContrattoArchivio.impostaCartella(r.getResponseText().trim());
+    ui.alert('Cartella impostata: ' + c.nome + '\n' + c.url);
+  } catch (e) {
+    ui.alert('Cartella non accessibile: ' + (e && e.message ? e.message : e));
+  }
+}
+
+// --------------------------------------------- funzioni chiamate dalla pagina
+function contrattoValida(dati) {
+  var c = ContrattoControlli.valida(dati);
+  return { errori: c.errori, avvisi: c.avvisi, dati: c.dati, totale: c.totale };
+}
+
+function contrattoGenera(dati, opzioni) {
+  return ContrattoArchivio.genera(dati, opzioni);
+}
+
+function contrattoFirma() {
+  var f = ContrattoArchivio.firma();
+  return { nome: f.nome, immagine: f.immagine, errore: f.errore };
+}
+
+/** Pubblicazione facoltativa come web app (Distribuisci > Nuova distribuzione > App web). */
+function doGet() {
+  return ContrattoUi.pagina(null);
+}
+
+// ===== html/contratto.html (incorporato dal build) =====
+var HTML_CONTRATTO = "<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<base target=\"_blank\">\n<title>Contratto di vendita</title>\n<style>\n  :root { --teal: #209cae; --teal-scuro: #17788a; --grigio: #f3f4f6; --bordo: #d6dadf; --testo: #1f2937; --rosso: #b91c1c; --ambra: #b45309; --verde: #15803d; }\n  * { box-sizing: border-box; }\n  html, body { margin: 0; height: 100%; font-family: -apple-system, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; font-size: 13px; color: var(--testo); background: #fff; }\n  .app { display: flex; flex-direction: column; height: 100%; }\n  .barra { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--bordo); background: #fff; }\n  .barra .titolo { font-weight: 700; font-size: 15px; color: var(--teal-scuro); white-space: nowrap; }\n  .barra .versione { font-weight: 400; color: #9ca3af; font-size: 11px; margin-left: 4px; }\n  .barra .stato { flex: 1; color: #4b5563; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n  .barra .azioni { display: flex; align-items: center; gap: 10px; }\n  .opzione { color: #374151; white-space: nowrap; }\n  button { font: inherit; border-radius: 6px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--bordo); background: #fff; color: var(--testo); }\n  button.primario { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; }\n  button.primario:disabled { background: #9fd2db; border-color: #9fd2db; cursor: not-allowed; }\n  button.secondario:hover { background: var(--grigio); }\n  button.piccolo { padding: 3px 8px; font-size: 12px; }\n  main { display: flex; flex: 1; min-height: 0; }\n  .modulo { width: 46%; min-width: 460px; overflow-y: auto; padding: 10px 14px 30px; border-right: 1px solid var(--bordo); }\n  .anteprima { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #e5e7eb; }\n  fieldset { border: 1px solid var(--bordo); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 10px; }\n  legend { font-weight: 700; color: var(--teal-scuro); padding: 0 6px; font-size: 13px; }\n  .griglia { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px 10px; }\n  .campo { display: flex; flex-direction: column; gap: 3px; }\n  .c12 { grid-column: span 12; } .c8 { grid-column: span 8; } .c6 { grid-column: span 6; } .c4 { grid-column: span 4; } .c3 { grid-column: span 3; } .c2 { grid-column: span 2; }\n  label.et { font-size: 11px; color: #4b5563; }\n  input[type=text], input[type=date], input[type=number], input[type=email], select, textarea { font: inherit; width: 100%; padding: 6px 8px; border: 1px solid var(--bordo); border-radius: 6px; background: #fff; }\n  input:focus, select:focus, textarea:focus { outline: 2px solid #bfe4ea; border-color: var(--teal); }\n  textarea { min-height: 54px; resize: vertical; }\n  .chk { display: flex; align-items: center; gap: 6px; padding-top: 18px; white-space: nowrap; }\n  .chk.senza { padding-top: 0; }\n  .suggerimento { font-size: 11px; color: #6b7280; margin-top: 2px; }\n  .riga { border: 1px solid var(--bordo); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fafafa; }\n  .riga .r1, .riga .r2 { display: grid; gap: 6px; margin-bottom: 6px; }\n  .riga .r1 { grid-template-columns: 1fr 58px 100px 90px auto 30px; align-items: center; }\n  .riga .r2 { grid-template-columns: 1fr 1fr 1fr; }\n  .riga .r3 { font-size: 11px; color: #4b5563; display: flex; justify-content: space-between; }\n  .riga .r3 b { color: var(--testo); }\n  .riga .elimina { padding: 4px 0; width: 30px; color: var(--rosso); border-color: transparent; background: transparent; font-weight: 700; }\n  .riga .elimina:hover { background: #fee2e2; }\n  .riga input[type=checkbox] { margin: 0 4px 0 0; }\n  .totale-riepilogo { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 13px; }\n  .totale-riepilogo b { color: var(--teal-scuro); font-size: 14px; }\n  .avvisi { padding: 8px 12px; max-height: 32%; overflow-y: auto; background: #fff; border-bottom: 1px solid var(--bordo); font-size: 12px; }\n  .avvisi:empty { display: none; }\n  .avvisi .voce { display: flex; gap: 6px; padding: 2px 0; }\n  .avvisi .voce.errore { color: var(--rosso); }\n  .avvisi .voce.avviso { color: var(--ambra); }\n  .avvisi .voce.ok { color: var(--verde); }\n  .esito { padding: 10px 12px; background: #ecfdf5; border-bottom: 1px solid #a7f3d0; color: #065f46; font-size: 13px; }\n  .esito a { color: #065f46; font-weight: 600; margin-right: 12px; }\n  .nascosto { display: none !important; }\n  .cornice { flex: 1; overflow: auto; padding: 8px; }\n  .scala { transform-origin: 0 0; }\n  iframe { border: 0; background: transparent; width: 830px; height: 2330px; display: block; }\n  .operatore { font-size: 12px; color: #4b5563; }\n  .operatore b { color: var(--testo); }\n  @media (max-width: 980px) { main { flex-direction: column; } .modulo { width: 100%; min-width: 0; border-right: 0; border-bottom: 1px solid var(--bordo); max-height: 55%; } }\n</style>\n</head>\n<body>\n<div class=\"app\">\n  <header class=\"barra\">\n    <div class=\"titolo\">Contratto di vendita <span class=\"versione\">v<?= versione ?></span></div>\n    <div class=\"stato\" id=\"stato\">Compila i campi: l'anteprima si aggiorna da sola e i controlli vengono fatti dallo script.</div>\n    <div class=\"azioni\">\n      <label class=\"opzione\"><input type=\"checkbox\" id=\"bozzaEmail\"> Prepara bozza email al cliente</label>\n      <button type=\"button\" id=\"btnStampa\" class=\"secondario\" title=\"Apre il contratto in una scheda per stamparlo o salvarlo come PDF dal browser\">Stampa</button>\n      <button type=\"button\" id=\"btnGenera\" class=\"primario\" disabled>Genera PDF</button>\n    </div>\n  </header>\n  <main>\n    <section class=\"modulo\" id=\"modulo\">\n\n      <fieldset>\n        <legend>Intestazione</legend>\n        <div class=\"griglia\">\n          <div class=\"campo c12\"><label class=\"et\">Sottotitolo (vuoto = proposto in automatico dalla fornitura)</label><input type=\"text\" data-campo=\"sottotitolo\" id=\"sottotitolo\"></div>\n          <div class=\"campo c4\"><label class=\"et\">Preventivo n.</label><input type=\"text\" data-campo=\"preventivo.numero\" placeholder=\"es. 2026/0895\"></div>\n          <div class=\"campo c4\"><label class=\"et\">Data del preventivo</label><input type=\"date\" data-campo=\"preventivo.data\"></div>\n          <div class=\"campo c4\"><label class=\"et\">Data di sottoscrizione (vuota = riga da compilare a mano)</label><input type=\"date\" data-campo=\"dataSottoscrizione\"></div>\n          <div class=\"campo c6\"><label class=\"et\">Luogo della firma (facoltativo)</label><input type=\"text\" data-campo=\"luogo\" placeholder=\"es. Napoli\"></div>\n          <div class=\"campo c6 operatore\" style=\"justify-content:flex-end\"><span>Operatore: <b id=\"operatoreNome\"></b> <span id=\"operatoreFirma\"></span></span></div>\n        </div>\n      </fieldset>\n\n      <fieldset>\n        <legend>1. Cliente</legend>\n        <div class=\"griglia\">\n          <div class=\"campo c2\"><label class=\"et\">Titolo</label><select data-campo=\"cliente.titolo\" id=\"titolo\"></select></div>\n          <div class=\"campo c5\" style=\"grid-column: span 5\"><label class=\"et\">Nome *</label><input type=\"text\" data-campo=\"cliente.nome\" autocomplete=\"off\"></div>\n          <div class=\"campo c5\" style=\"grid-column: span 5\"><label class=\"et\">Cognome *</label><input type=\"text\" data-campo=\"cliente.cognome\" autocomplete=\"off\"></div>\n          <div class=\"campo c6\"><label class=\"et\">Codice fiscale</label><input type=\"text\" data-campo=\"cliente.codiceFiscale\" maxlength=\"16\" style=\"text-transform: uppercase\" autocomplete=\"off\"></div>\n          <div class=\"campo c3\"><label class=\"et\">Telefono</label><input type=\"text\" data-campo=\"cliente.telefono\" placeholder=\"333 123 4567\"></div>\n          <div class=\"campo c3\"><label class=\"et\">E-mail</label><input type=\"email\" data-campo=\"cliente.email\"></div>\n          <div class=\"campo c8\"><label class=\"et\">Indirizzo (via e numero civico) *</label><input type=\"text\" data-campo=\"cliente.indirizzo\" placeholder=\"es. Via Arcangelo Ghisleri 28\"></div>\n          <div class=\"campo c4\"><label class=\"et\">Scala, interno, presso</label><input type=\"text\" data-campo=\"cliente.indirizzo2\" placeholder=\"es. Parco Lucrezia\"></div>\n          <div class=\"campo c3\"><label class=\"et\">CAP *</label><input type=\"text\" data-campo=\"cliente.cap\" maxlength=\"5\" inputmode=\"numeric\"></div>\n          <div class=\"campo c6\"><label class=\"et\">Comune *</label><input type=\"text\" data-campo=\"cliente.comune\"></div>\n          <div class=\"campo c3\"><label class=\"et\">Provincia (sigla) *</label><input type=\"text\" data-campo=\"cliente.provincia\" maxlength=\"2\" style=\"text-transform: uppercase\"></div>\n        </div>\n      </fieldset>\n\n      <fieldset>\n        <legend>2. Fornitura e prezzo</legend>\n        <div id=\"righe\"></div>\n        <div class=\"totale-riepilogo\">\n          <button type=\"button\" class=\"piccolo secondario\" id=\"btnAggiungiRiga\">+ Aggiungi voce</button>\n          <span>Totale contratto (IVA inclusa): <b id=\"totale\">0,00 €</b></span>\n        </div>\n        <div class=\"griglia\" style=\"margin-top:10px\">\n          <div class=\"campo c12\"><label class=\"et\">Nota sotto il totale (vuota = proposta in automatico)</label><textarea data-campo=\"notaFornitura\" id=\"notaFornitura\"></textarea></div>\n          <div class=\"campo c12\"><label class=\"chk senza\"><input type=\"checkbox\" data-campo=\"spedizioneInclusa\"> Spedizione inclusa (frase \"Non sono previsti ulteriori addebiti di spedizione\")</label></div>\n        </div>\n      </fieldset>\n\n      <fieldset>\n        <legend>3. Pagamento</legend>\n        <div class=\"griglia\">\n          <div class=\"campo c6\"><label class=\"et\">Modalità di pagamento</label><select data-campo=\"pagamento.modalita\" id=\"modalita\"></select></div>\n          <div class=\"campo c3\"><label class=\"et\">Acconto alla conferma €</label><input type=\"text\" inputmode=\"decimal\" data-campo=\"pagamento.acconto\" placeholder=\"0,00\"></div>\n          <div class=\"campo c3 solo-rateale\"><label class=\"et\">Numero di rate</label><input type=\"number\" min=\"2\" step=\"1\" data-campo=\"pagamento.rate\"></div>\n          <div class=\"campo c6 solo-finanziamento\"><label class=\"et\">Finanziaria</label><input type=\"text\" data-campo=\"pagamento.finanziaria\" placeholder=\"HeyLight\"></div>\n          <div class=\"campo c6 solo-finanziamento\"><label class=\"et\">Maggiorazione complessiva % (0 = tasso zero)</label><input type=\"text\" inputmode=\"decimal\" data-campo=\"pagamento.maggiorazione\"></div>\n          <div class=\"campo c12 solo-altro\"><label class=\"et\">Descrizione della modalità (stampata nel contratto)</label><textarea data-campo=\"pagamento.testo\"></textarea></div>\n          <div class=\"c12 suggerimento\" id=\"riepilogoPagamento\"></div>\n        </div>\n      </fieldset>\n\n      <fieldset>\n        <legend>Consegna</legend>\n        <div class=\"griglia\">\n          <div class=\"campo c6\"><label class=\"et\">Nome del destinatario (vuoto = il cliente)</label><input type=\"text\" data-campo=\"consegna.destinatario\"></div>\n          <div class=\"campo c6\"><label class=\"chk\"><input type=\"checkbox\" data-campo=\"consegna.diversa\" id=\"consegnaDiversa\"> Indirizzo di consegna diverso dalla residenza</label></div>\n          <div class=\"campo c8 solo-consegna\"><label class=\"et\">Indirizzo di consegna *</label><input type=\"text\" data-campo=\"consegna.indirizzo\"></div>\n          <div class=\"campo c4 solo-consegna\"><label class=\"et\">Scala, interno, presso</label><input type=\"text\" data-campo=\"consegna.indirizzo2\"></div>\n          <div class=\"campo c3 solo-consegna\"><label class=\"et\">CAP *</label><input type=\"text\" data-campo=\"consegna.cap\" maxlength=\"5\" inputmode=\"numeric\"></div>\n          <div class=\"campo c6 solo-consegna\"><label class=\"et\">Comune *</label><input type=\"text\" data-campo=\"consegna.comune\"></div>\n          <div class=\"campo c3 solo-consegna\"><label class=\"et\">Provincia *</label><input type=\"text\" data-campo=\"consegna.provincia\" maxlength=\"2\" style=\"text-transform: uppercase\"></div>\n          <div class=\"campo c12\"><label class=\"et\">Note sulla consegna (facoltative)</label><input type=\"text\" data-campo=\"consegna.note\" placeholder=\"es. Consegna al portiere\"></div>\n        </div>\n      </fieldset>\n\n      <fieldset>\n        <legend>4. Condizioni</legend>\n        <div class=\"griglia\">\n          <div class=\"campo c4\"><label class=\"chk\"><input type=\"checkbox\" data-campo=\"condizioni.prova\"> Prova convenzionale di 30 giorni</label></div>\n          <div class=\"campo c4\"><label class=\"et\">Garanzia (mesi dalla consegna)</label><input type=\"number\" min=\"24\" step=\"1\" data-campo=\"condizioni.garanziaMesi\"></div>\n          <div class=\"campo c12\"><label class=\"et\">Estensione di garanzia concordata (facoltativa)</label><input type=\"text\" data-campo=\"condizioni.estensione\" placeholder=\"es. Migelino Plus: 4 anni, copre danni accidentali, furto e smarrimento\"></div>\n          <div class=\"campo c12\"><label class=\"et\">Condizioni particolari (facoltative, stampate nella sezione 4)</label><textarea data-campo=\"condizioni.note\"></textarea></div>\n        </div>\n      </fieldset>\n\n    </section>\n\n    <section class=\"anteprima\">\n      <div id=\"esito\" class=\"esito nascosto\"></div>\n      <div id=\"avvisi\" class=\"avvisi\"></div>\n      <div class=\"cornice\" id=\"cornice\"><div class=\"scala\" id=\"scala\"><iframe id=\"anteprima\" title=\"Anteprima del contratto\"></iframe></div></div>\n    </section>\n  </main>\n</div>\n\n<script>\n  var RISORSE = <?!= risorseJson ?>;\n  var DATI_INIZIALI = <?!= datiJson ?>;\n  var OPERATORE = <?!= operatoreJson ?>;\n  <?!= nucleoSorgente ?>\n</script>\n<script>\n  var N = contrattoNucleo(RISORSE);\n  var dati = N.normalizza(DATI_INIZIALI || N.datiVuoti());\n  if (DATI_INIZIALI) dati.numero = ''; // riapertura: il numero viene assegnato alla nuova generazione\n  var firma = { nome: (OPERATORE && OPERATORE.nome) || '', immagine: '' };\n  var haScript = typeof google !== 'undefined' && google.script && google.script.run;\n  var ultimoControllo = 0;\n  var timerAnteprima = null;\n  var timerControllo = null;\n  var generato = false;\n\n  function $(id) { return document.getElementById(id); }\n\n  function leggi(percorso) {\n    return percorso.split('.').reduce(function (o, k) { return o === null || o === undefined ? undefined : o[k]; }, dati);\n  }\n\n  function scrivi(percorso, valore) {\n    var p = percorso.split('.');\n    var o = dati;\n    for (var i = 0; i < p.length - 1; i++) {\n      if (o[p[i]] === null || typeof o[p[i]] !== 'object') o[p[i]] = {};\n      o = o[p[i]];\n    }\n    o[p[p.length - 1]] = valore;\n  }\n\n  function stato(testo) { $('stato').textContent = testo || ''; }\n\n  // ------------------------------------------------------------- modulo\n  function riempiSelect(select, voci, valore) {\n    select.innerHTML = '';\n    voci.forEach(function (v) {\n      var o = document.createElement('option');\n      o.value = v.codice;\n      o.textContent = v.nome;\n      select.appendChild(o);\n    });\n    select.value = valore;\n  }\n\n  function riempiModulo() {\n    riempiSelect($('titolo'), N.TITOLI.map(function (t) { return { codice: t, nome: t || '(nessuno)' }; }), dati.cliente.titolo);\n    riempiSelect($('modalita'), N.MODALITA, dati.pagamento.modalita);\n    var campi = document.querySelectorAll('#modulo [data-campo]');\n    for (var i = 0; i < campi.length; i++) {\n      var el = campi[i];\n      var v = leggi(el.getAttribute('data-campo'));\n      if (el.type === 'checkbox') el.checked = !!v;\n      else if (el.tagName === 'SELECT') el.value = v;\n      else el.value = v === undefined || v === null ? '' : (typeof v === 'number' ? numeroPerCampo(v) : v);\n    }\n    $('operatoreNome').textContent = firma.nome || (OPERATORE && OPERATORE.email) || '(non impostato)';\n    $('operatoreFirma').textContent = OPERATORE && OPERATORE.haFirma ? '(firma impostata)' : '(nessuna firma: menu Contratti > Imposta il mio nome e la mia firma)';\n    rendiRighe();\n    aggiornaCondizionali();\n  }\n\n  function numeroPerCampo(n) {\n    return n === 0 ? '' : String(n).replace('.', ',');\n  }\n\n  function rendiRighe() {\n    var c = $('righe');\n    c.innerHTML = '';\n    dati.righe.forEach(function (r, i) {\n      var d = document.createElement('div');\n      d.className = 'riga';\n      d.setAttribute('data-indice', i);\n      d.innerHTML =\n        '<div class=\"r1\">' +\n        '<input type=\"text\" data-riga=\"' + i + '\" data-campo-riga=\"descrizione\" placeholder=\"Descrizione (es. Oticon Intent 1 - coppia (2 apparecchi))\">' +\n        '<input type=\"number\" min=\"1\" step=\"1\" data-riga=\"' + i + '\" data-campo-riga=\"quantita\" title=\"Quantità\">' +\n        '<input type=\"text\" inputmode=\"decimal\" data-riga=\"' + i + '\" data-campo-riga=\"prezzo\" placeholder=\"Prezzo unit. €\" title=\"Prezzo unitario IVA inclusa\">' +\n        '<input type=\"text\" inputmode=\"decimal\" data-riga=\"' + i + '\" data-campo-riga=\"sconto\" placeholder=\"Sconto €\" title=\"Sconto in euro sulla voce\">' +\n        '<label class=\"chk senza\" title=\"Voce fornita in omaggio: nel contratto compare il valore e lo sconto integrale\"><input type=\"checkbox\" data-riga=\"' + i + '\" data-campo-riga=\"omaggio\"> omaggio</label>' +\n        '<button type=\"button\" class=\"elimina\" data-elimina=\"' + i + '\" title=\"Togli la voce\">&#x2715;</button>' +\n        '</div>' +\n        '<div class=\"r2\">' +\n        '<input type=\"text\" data-riga=\"' + i + '\" data-campo-riga=\"dettaglio\" placeholder=\"Dettaglio sotto la voce (es. Colore selezionato: Honey Beige)\">' +\n        '<input type=\"text\" data-riga=\"' + i + '\" data-campo-riga=\"etichettaSconto\" placeholder=\"Etichetta sconto/omaggio (es. Sconto sulla coppia)\">' +\n        '<input type=\"text\" data-riga=\"' + i + '\" data-campo-riga=\"etichettaDopoSconto\" placeholder=\"Etichetta dopo lo sconto (es. Prezzo della coppia dopo lo sconto)\">' +\n        '</div>' +\n        '<div class=\"r3\"><span class=\"importo\"></span><span class=\"dopo\"></span></div>';\n      c.appendChild(d);\n      var ingressi = d.querySelectorAll('[data-campo-riga]');\n      for (var k = 0; k < ingressi.length; k++) {\n        var el = ingressi[k];\n        var nome = el.getAttribute('data-campo-riga');\n        if (el.type === 'checkbox') el.checked = !!r[nome];\n        else if (nome === 'quantita') el.value = r.quantita;\n        else if (nome === 'prezzo' || nome === 'sconto') el.value = numeroPerCampo(r[nome]);\n        else el.value = r[nome] || '';\n      }\n    });\n    aggiornaImportiRighe();\n  }\n\n  function aggiornaImportiRighe() {\n    var righe = document.querySelectorAll('#righe .riga');\n    for (var i = 0; i < righe.length; i++) {\n      var r = N.normalizza({ righe: [dati.righe[i]] }).righe[0];\n      var importo = r.quantita * r.prezzo;\n      var dopo = r.omaggio ? 0 : Math.max(0, importo - Math.min(r.sconto, importo));\n      righe[i].querySelector('.importo').innerHTML = 'Importo: <b>' + N.esc(N.euro(importo)) + '</b>' + (r.quantita > 1 ? ' (' + r.quantita + ' x ' + N.esc(N.euro(r.prezzo)) + ')' : '');\n      righe[i].querySelector('.dopo').innerHTML = r.omaggio ? 'In omaggio: addebito <b>0,00 €</b>' : (r.sconto > 0 ? 'Dopo lo sconto: <b>' + N.esc(N.euro(dopo)) + '</b>' : '');\n      var etichettaDopo = righe[i].querySelector('[data-campo-riga=\"etichettaDopoSconto\"]');\n      etichettaDopo.style.visibility = (!r.omaggio && r.sconto > 0) ? 'visible' : 'hidden';\n    }\n    var calcolo = N.calcola(dati);\n    $('totale').textContent = N.euro(calcolo.totale);\n    $('sottotitolo').placeholder = N.sottotitoloProposto(dati) || 'Es. Oticon Intent 1 - Coppia | SmartCharger incluso gratuitamente';\n    $('notaFornitura').placeholder = N.notaFornituraProposta(dati) || 'Nessuna nota';\n    var pag = calcolo.pagamento;\n    $('riepilogoPagamento').textContent = pag.righe.map(function (x) { return x[0] + ': ' + x[1]; }).join(' · ');\n  }\n\n  function mostra(selettore, visibile) {\n    var el = document.querySelectorAll(selettore);\n    for (var i = 0; i < el.length; i++) el[i].classList.toggle('nascosto', !visibile);\n  }\n\n  function aggiornaCondizionali() {\n    var m = dati.pagamento.modalita;\n    mostra('.solo-rateale', m === 'FINANZIAMENTO' || m === 'RATE');\n    mostra('.solo-finanziamento', m === 'FINANZIAMENTO');\n    mostra('.solo-altro', m === 'ALTRO');\n    mostra('.solo-consegna', !!dati.consegna.diversa);\n  }\n\n  // -------------------------------------------------------------- eventi\n  function valoreDi(el) {\n    if (el.type === 'checkbox') return el.checked;\n    return el.value;\n  }\n\n  function suCambio(e) {\n    var el = e.target;\n    if (!el) return;\n    if (el.hasAttribute('data-campo')) {\n      scrivi(el.getAttribute('data-campo'), valoreDi(el));\n    } else if (el.hasAttribute('data-campo-riga')) {\n      var i = Number(el.getAttribute('data-riga'));\n      if (dati.righe[i]) dati.righe[i][el.getAttribute('data-campo-riga')] = valoreDi(el);\n    } else {\n      return;\n    }\n    if (el.tagName === 'SELECT' || el.type === 'checkbox') aggiornaCondizionali();\n    cambiato();\n  }\n\n  function cambiato() {\n    if (generato) {\n      generato = false;\n      dati.numero = '';\n      $('esito').classList.add('nascosto');\n    }\n    aggiornaImportiRighe();\n    clearTimeout(timerAnteprima);\n    timerAnteprima = setTimeout(aggiornaAnteprima, 150);\n    clearTimeout(timerControllo);\n    timerControllo = setTimeout(controlla, 700);\n    $('btnGenera').disabled = true;\n    stato('Controllo in corso...');\n  }\n\n  $('modulo').addEventListener('input', suCambio);\n  $('modulo').addEventListener('change', suCambio);\n  $('modulo').addEventListener('click', function (e) {\n    var b = e.target.closest ? e.target.closest('[data-elimina]') : null;\n    if (!b) return;\n    var i = Number(b.getAttribute('data-elimina'));\n    dati.righe.splice(i, 1);\n    if (!dati.righe.length) dati.righe.push(N.rigaVuota());\n    rendiRighe();\n    cambiato();\n  });\n  $('btnAggiungiRiga').addEventListener('click', function () {\n    dati.righe.push(N.rigaVuota());\n    rendiRighe();\n    var ultime = document.querySelectorAll('#righe .riga');\n    var ultima = ultime[ultime.length - 1];\n    if (ultima) ultima.querySelector('[data-campo-riga=\"descrizione\"]').focus();\n    cambiato();\n  });\n  $('btnGenera').addEventListener('click', genera);\n  $('btnStampa').addEventListener('click', stampa);\n  window.addEventListener('resize', scalaAnteprima);\n\n  // ----------------------------------------------------------- anteprima\n  // datiMostrati: se presenti, i dati normalizzati dallo script (maiuscole, comune ufficiale, telefono)\n  function aggiornaAnteprima(datiMostrati) {\n    var html = N.html(datiMostrati || dati, { anteprima: true, browser: true, firma: firma });\n    var f = $('anteprima');\n    if ('srcdoc' in f) f.srcdoc = html;\n    else { var d = f.contentWindow.document; d.open(); d.write(html); d.close(); }\n    scalaAnteprima();\n  }\n\n  function scalaAnteprima() {\n    var cornice = $('cornice');\n    var larghezza = cornice.clientWidth - 16;\n    var k = Math.min(1, larghezza / 830);\n    var s = $('scala');\n    s.style.transform = 'scale(' + k + ')';\n    s.style.width = Math.round(830 * k) + 'px';\n    s.style.height = Math.round(2330 * k) + 'px';\n  }\n\n  // ------------------------------------------------------------ controlli\n  function mostraAvvisi(r) {\n    var c = $('avvisi');\n    c.innerHTML = '';\n    if (!r) return;\n    function voce(classe, simbolo, testo) {\n      var d = document.createElement('div');\n      d.className = 'voce ' + classe;\n      d.innerHTML = '<span>' + simbolo + '</span><span></span>';\n      d.lastChild.textContent = testo;\n      c.appendChild(d);\n    }\n    (r.errori || []).forEach(function (t) { voce('errore', '⛔', t); });\n    (r.avvisi || []).forEach(function (t) { voce('avviso', '⚠️', t); });\n    if (!(r.errori || []).length) voce('ok', '✅', (r.avvisi || []).length ? 'Nessun errore bloccante: controlla gli avvisi, poi Genera PDF.' : 'Tutti i controlli superati.');\n  }\n\n  function controlla() {\n    if (!haScript) {\n      stato('Anteprima locale (senza script): controlli non disponibili.');\n      $('btnGenera').disabled = false;\n      return;\n    }\n    var versione = ++ultimoControllo;\n    google.script.run\n      .withSuccessHandler(function (r) {\n        if (versione !== ultimoControllo) return;\n        mostraAvvisi(r);\n        if (r.dati) { r.dati.numero = dati.numero; aggiornaAnteprima(r.dati); }\n        var ok = !(r.errori || []).length;\n        $('btnGenera').disabled = !ok;\n        stato(ok ? 'Pronto: totale ' + N.euro(r.totale) + '. Puoi generare il PDF.' : 'Ci sono ' + r.errori.length + ' errori da correggere prima di generare il PDF.');\n      })\n      .withFailureHandler(function (e) {\n        if (versione !== ultimoControllo) return;\n        stato('Controllo non riuscito: ' + (e && e.message ? e.message : e));\n      })\n      .contrattoValida(dati);\n  }\n\n  // ------------------------------------------------------------- genera\n  function genera() {\n    if (!haScript) { alert('Il PDF si genera dallo script del Foglio (menu Contratti).'); return; }\n    $('btnGenera').disabled = true;\n    stato('Generazione del PDF in corso (qualche secondo)...');\n    google.script.run\n      .withSuccessHandler(function (r) {\n        generato = true;\n        dati.numero = r.numero;\n        var e = $('esito');\n        e.innerHTML = '';\n        var t = document.createElement('div');\n        t.innerHTML = '<b>Contratto n. ' + N.esc(r.numero) + ' generato</b> (' + N.esc(r.pdfNome) + ', totale ' + N.esc(N.euro(r.totale)) + '). ';\n        e.appendChild(t);\n        var link = document.createElement('div');\n        link.innerHTML = '<a href=\"' + N.esc(r.pdfUrl) + '\">Apri il PDF su Drive</a>' +\n          (r.bozzaUrl ? '<a href=\"' + N.esc(r.bozzaUrl) + '\">Apri la bozza email in Gmail</a>' : '') +\n          '<span style=\"color:#4b5563\">Riga aggiunta nel foglio \"Contratti\". Modificando i dati si prepara una nuova versione con un nuovo numero.</span>';\n        e.appendChild(link);\n        if (r.avvisi && r.avvisi.length) {\n          var a = document.createElement('div');\n          a.style.marginTop = '4px';\n          a.textContent = 'Avvisi: ' + r.avvisi.join(' · ');\n          e.appendChild(a);\n        }\n        e.classList.remove('nascosto');\n        stato('PDF generato: contratto n. ' + r.numero + '.');\n        aggiornaAnteprima();\n      })\n      .withFailureHandler(function (e) {\n        stato('PDF non generato: ' + (e && e.message ? e.message : e));\n        $('btnGenera').disabled = false;\n      })\n      .contrattoGenera(dati, { bozzaEmail: $('bozzaEmail').checked });\n  }\n\n  // ------------------------------------------------------------- stampa\n  function stampa() {\n    var html = N.html(dati, { browser: true, firma: firma });\n    try {\n      var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));\n      var w = window.open(url, '_blank');\n      if (w) {\n        setTimeout(function () { try { w.focus(); w.print(); } catch (e) { /* stampa manuale dalla scheda */ } }, 900);\n        return;\n      }\n    } catch (e) { /* passa alla stampa dell'anteprima */ }\n    try {\n      var f = $('anteprima');\n      f.contentWindow.focus();\n      f.contentWindow.print();\n    } catch (e2) {\n      stato('Stampa non disponibile in questa finestra: usa \"Genera PDF\" e apri il file su Drive.');\n    }\n  }\n\n  // --------------------------------------------------------------- avvio\n  riempiModulo();\n  aggiornaAnteprima();\n  controlla();\n  if (haScript && OPERATORE && OPERATORE.haFirma) {\n    google.script.run.withSuccessHandler(function (f) {\n      if (f && f.immagine) { firma.immagine = f.immagine; firma.nome = f.nome || firma.nome; aggiornaAnteprima(); }\n      else if (f && f.errore) stato(f.errore);\n    }).contrattoFirma();\n  }\n</script>\n</body>\n</html>\n";

@@ -74,6 +74,11 @@ si può usare quel token al posto di Client ID/Secret.
 
 Note:
 
+- **Contratti di vendita**: con lo stesso script compare anche il menu **Contratti** (guida in
+  [CONTRATTI.md](CONTRATTI.md)). La prima volta ogni operatore imposta nome e firma dal menu.
+- **Aggiornamento dalla versione 1.0**: incollare il nuovo `dist/Anagrafica.gs` e il nuovo `dist/appsscript.json`
+  (c'è un permesso in più, Google Drive, per salvare i PDF e leggere le firme). Alla prima voce di menu Google
+  chiede di autorizzare di nuovo lo script: stessa schermata dell'installazione.
 - Le conferme arrivate durante la modalità OMBRA restano da gestire a mano: il sistema non le rielabora al passaggio in
   LIVE. Per una singola conversazione si può sempre usare l'etichetta `Anagrafica/▶ Crea`.
 - Per aggiornare il codice: incollare di nuovo `dist/Anagrafica.gs` e salvare. Impostazioni e memoria restano.
@@ -117,3 +122,7 @@ Editor Apps Script → Impostazioni progetto → Proprietà dello script:
 | `MODALITA` | `OMBRA` | `OMBRA` oppure `LIVE` |
 | `SOGLIA_CAMPO` | `0.85` | Confidenza minima perché un campo venga scritto |
 | `SOGLIA_CONFERMA` | `0.85` | Probabilità minima per considerare un messaggio una conferma |
+| `CONTRATTI_CARTELLA_ID` | (automatica) | Cartella Drive dei PDF dei contratti (si imposta anche dal menu Contratti) |
+| `CONTRATTO_ULTIMO_NUMERO` | (vuoto) | Ultimo numero di contratto assegnato, es. `2026/0012` |
+| `CONTRATTO_VENDITORE` | (dal codice) | Testo "Venditore" del contratto, se diverso da quello predefinito |
+| `CONTRATTO_PIE` | (dal codice) | Piè di pagina del contratto, se diverso da quello predefinito |

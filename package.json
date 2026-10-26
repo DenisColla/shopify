@@ -1,8 +1,8 @@
 {
   "name": "migelino-anagrafica-automatica",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Crea in automatico l'anagrafica cliente su Shopify dalle mail di conferma dei pazienti (Google Apps Script).",
+  "description": "Gestionale Migelino su Google Apps Script: anagrafica cliente automatica da Gmail a Shopify e contratto di vendita compilabile con PDF.",
   "type": "module",
   "scripts": {
     "test": "node --test \"tests/*.test.mjs\"",

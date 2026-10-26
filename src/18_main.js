@@ -21,6 +21,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Disattiva il controllo sulla mia casella', 'disattivaAutomazione')
     .addToUi();
+  ContrattoUi.menu(SpreadsheetApp.getUi());
 }
 
 /** Chiede le impostazioni una alla volta; vuoto = mantenere il valore attuale, "-" = cancellarlo. */

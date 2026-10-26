@@ -1,7 +1,8 @@
-# Piano: contratto di vendita compilabile (bozza, in attesa delle risposte di Denis)
+# Piano: contratto di vendita compilabile
 
-Stato: **bozza del 26/10/2026**. Le scelte aperte sono elencate in fondo (sezione 9) e vanno decise prima di
-costruire. Nessun dato di pazienti in questo documento né nel codice: gli esempi sono inventati.
+Stato: **approvato da Denis il 26/10/2026** con una modifica: **nessun collegamento a Shopify, dati inseriti a mano**.
+Le altre scelte seguono le opzioni consigliate (sezione 9). Realizzato: vedi [CONTRATTI.md](CONTRATTI.md).
+Nessun dato di pazienti in questo documento né nel codice: gli esempi sono inventati.
 
 ## 1. Obiettivo
 
@@ -124,12 +125,21 @@ consegna, producendo un PDF di esempio da approvare.
 | 5 | Documentazione (`docs/CONTRATTI.md`, aggiornamento installazione) e collaudo con l'ufficio | Avvio |
 | 6 (dopo) | Firma elettronica del cliente via link (firma col dito, PDF finale con data e ora) | Da decidere |
 
-## 9. Scelte aperte (domande a Denis)
+## 9. Scelte fatte (26/10/2026)
 
-Vedi la conversazione del 26/10/2026: sede della funzione, precompilazione, numero del preventivo, numerazione
-del contratto, modalità di pagamento da prevedere, firma Migelino, uscite dopo la generazione, riga garanzia,
-firma del cliente, gestione dei testi legali, conferma dei dati del venditore (ragione sociale, indirizzo,
-recapiti del piè di pagina).
+| Scelta | Decisione |
+|---|---|
+| Sede della funzione | Menu **Contratti** nel Foglio del gestionale; `doGet` pronto per la pubblicazione come app web |
+| Precompilazione | **Nessuna: tutto a mano** (decisione di Denis). Le sezioni 5 e la fase 3 di questo piano non sono state realizzate |
+| Numero del preventivo | Campo libero, anche vuoto |
+| Numerazione del contratto | Progressiva per anno, es. `2026/0001`, nelle Proprietà dello script |
+| Modalità di pagamento | Bonifico anticipato, carta o link online, finanziamento con finanziaria (rate e maggiorazione %), rate Migelino senza interessi, altro |
+| Firma Migelino | Immagine per operatore su Drive, impostata dal menu; senza immagine si firma a mano |
+| Dopo "Genera PDF" | PDF su Drive in `Contratti/<anno>` e riga nel foglio **Contratti**; bozza Gmail con allegato a richiesta (mai inviata); niente scritture su Shopify |
+| Garanzia | Periodo di garanzia esplicito nella sezione 4 (mesi dalla consegna) con eventuale estensione concordata; una voce in fornitura si aggiunge come riga |
+| Firma del cliente | Su carta (stampa, firma, scansione). Firma elettronica via link: possibile fase successiva |
+| Testi legali | Fissi nel codice con varianti automatiche (omaggio, finanziamento, prova) |
+| Dati del venditore | Quelli del PDF di riferimento (Migelino AG, Blegistrasse 13, Baar); modificabili dalle Proprietà dello script |
 
 ## 10. Privacy e sicurezza
 

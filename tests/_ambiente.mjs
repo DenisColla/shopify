@@ -2,7 +2,7 @@
 // finti servizi Google (PropertiesService, UrlFetchApp, GmailApp, ...).
 // I test usano solo dati INVENTATI: nessun dato reale di pazienti nel repo.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -12,6 +12,17 @@ const cartellaSrc = path.join(radice, 'src');
 
 export function fileSorgenti() {
   return readdirSync(cartellaSrc).filter((f) => f.endsWith('.js')).sort();
+}
+
+/** Pagine HTML incorporate dal build come costanti (stessa regola di tools/build.mjs). */
+export function pagineHtml() {
+  const cartella = path.join(cartellaSrc, 'html');
+  if (!existsSync(cartella)) return {};
+  const pagine = {};
+  for (const f of readdirSync(cartella).filter((x) => x.endsWith('.html')).sort()) {
+    pagine['HTML_' + f.replace(/\.html$/, '').toUpperCase().replace(/[^A-Z0-9]/g, '_')] = readFileSync(path.join(cartella, f), 'utf8');
+  }
+  return pagine;
 }
 
 export class ProprietaFinte {
@@ -80,6 +91,7 @@ export function creaAmbiente(opzioni = {}) {
     Session: { getScriptTimeZone: () => 'Europe/Rome' },
     ...(opzioni.globali || {})
   };
+  Object.assign(contesto, pagineHtml());
   vm.createContext(contesto);
   for (const f of fileSorgenti()) {
     const codice = readFileSync(path.join(cartellaSrc, f), 'utf8');

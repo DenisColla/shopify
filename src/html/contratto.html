@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base target="_blank">
+<title>Contratto di vendita</title>
+<style>
+  :root { --teal: #209cae; --teal-scuro: #17788a; --grigio: #f3f4f6; --bordo: #d6dadf; --testo: #1f2937; --rosso: #b91c1c; --ambra: #b45309; --verde: #15803d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 13px; color: var(--testo); background: #fff; }
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .barra { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--bordo); background: #fff; }
+  .barra .titolo { font-weight: 700; font-size: 15px; color: var(--teal-scuro); white-space: nowrap; }
+  .barra .versione { font-weight: 400; color: #9ca3af; font-size: 11px; margin-left: 4px; }
+  .barra .stato { flex: 1; color: #4b5563; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .barra .azioni { display: flex; align-items: center; gap: 10px; }
+  .opzione { color: #374151; white-space: nowrap; }
+  button { font: inherit; border-radius: 6px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--bordo); background: #fff; color: var(--testo); }
+  button.primario { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 600; }
+  button.primario:disabled { background: #9fd2db; border-color: #9fd2db; cursor: not-allowed; }
+  button.secondario:hover { background: var(--grigio); }
+  button.piccolo { padding: 3px 8px; font-size: 12px; }
+  main { display: flex; flex: 1; min-height: 0; }
+  .modulo { width: 46%; min-width: 460px; overflow-y: auto; padding: 10px 14px 30px; border-right: 1px solid var(--bordo); }
+  .anteprima { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #e5e7eb; }
+  fieldset { border: 1px solid var(--bordo); border-radius: 8px; margin: 0 0 12px; padding: 8px 12px 10px; }
+  legend { font-weight: 700; color: var(--teal-scuro); padding: 0 6px; font-size: 13px; }
+  .griglia { display: grid; grid-template-columns: repeat(12, 1fr); gap: 8px 10px; }
+  .campo { display: flex; flex-direction: column; gap: 3px; }
+  .c12 { grid-column: span 12; } .c8 { grid-column: span 8; } .c6 { grid-column: span 6; } .c4 { grid-column: span 4; } .c3 { grid-column: span 3; } .c2 { grid-column: span 2; }
+  label.et { font-size: 11px; color: #4b5563; }
+  input[type=text], input[type=date], input[type=number], input[type=email], select, textarea { font: inherit; width: 100%; padding: 6px 8px; border: 1px solid var(--bordo); border-radius: 6px; background: #fff; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #bfe4ea; border-color: var(--teal); }
+  textarea { min-height: 54px; resize: vertical; }
+  .chk { display: flex; align-items: center; gap: 6px; padding-top: 18px; white-space: nowrap; }
+  .chk.senza { padding-top: 0; }
+  .suggerimento { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .riga { border: 1px solid var(--bordo); border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fafafa; }
+  .riga .r1, .riga .r2 { display: grid; gap: 6px; margin-bottom: 6px; }
+  .riga .r1 { grid-template-columns: 1fr 58px 100px 90px auto 30px; align-items: center; }
+  .riga .r2 { grid-template-columns: 1fr 1fr 1fr; }
+  .riga .r3 { font-size: 11px; color: #4b5563; display: flex; justify-content: space-between; }
+  .riga .r3 b { color: var(--testo); }
+  .riga .elimina { padding: 4px 0; width: 30px; color: var(--rosso); border-color: transparent; background: transparent; font-weight: 700; }
+  .riga .elimina:hover { background: #fee2e2; }
+  .riga input[type=checkbox] { margin: 0 4px 0 0; }
+  .totale-riepilogo { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 13px; }
+  .totale-riepilogo b { color: var(--teal-scuro); font-size: 14px; }
+  .avvisi { padding: 8px 12px; max-height: 32%; overflow-y: auto; background: #fff; border-bottom: 1px solid var(--bordo); font-size: 12px; }
+  .avvisi:empty { display: none; }
+  .avvisi .voce { display: flex; gap: 6px; padding: 2px 0; }
+  .avvisi .voce.errore { color: var(--rosso); }
+  .avvisi .voce.avviso { color: var(--ambra); }
+  .avvisi .voce.ok { color: var(--verde); }
+  .esito { padding: 10px 12px; background: #ecfdf5; border-bottom: 1px solid #a7f3d0; color: #065f46; font-size: 13px; }
+  .esito a { color: #065f46; font-weight: 600; margin-right: 12px; }
+  .nascosto { display: none !important; }
+  .cornice { flex: 1; overflow: auto; padding: 8px; }
+  .scala { transform-origin: 0 0; }
+  iframe { border: 0; background: transparent; width: 830px; height: 2330px; display: block; }
+  .operatore { font-size: 12px; color: #4b5563; }
+  .operatore b { color: var(--testo); }
+  @media (max-width: 980px) { main { flex-direction: column; } .modulo { width: 100%; min-width: 0; border-right: 0; border-bottom: 1px solid var(--bordo); max-height: 55%; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="barra">
+    <div class="titolo">Contratto di vendita <span class="versione">v<?= versione ?></span></div>
+    <div class="stato" id="stato">Compila i campi: l'anteprima si aggiorna da sola e i controlli vengono fatti dallo script.</div>
+    <div class="azioni">
+      <label class="opzione"><input type="checkbox" id="bozzaEmail"> Prepara bozza email al cliente</label>
+      <button type="button" id="btnStampa" class="secondario" title="Apre il contratto in una scheda per stamparlo o salvarlo come PDF dal browser">Stampa</button>
+      <button type="button" id="btnGenera" class="primario" disabled>Genera PDF</button>
+    </div>
+  </header>
+  <main>
+    <section class="modulo" id="modulo">
+
+      <fieldset>
+        <legend>Intestazione</legend>
+        <div class="griglia">
+          <div class="campo c12"><label class="et">Sottotitolo (vuoto = proposto in automatico dalla fornitura)</label><input type="text" data-campo="sottotitolo" id="sottotitolo"></div>
+          <div class="campo c4"><label class="et">Preventivo n.</label><input type="text" data-campo="preventivo.numero" placeholder="es. 2026/0895"></div>
+          <div class="campo c4"><label class="et">Data del preventivo</label><input type="date" data-campo="preventivo.data"></div>
+          <div class="campo c4"><label class="et">Data di sottoscrizione (vuota = riga da compilare a mano)</label><input type="date" data-campo="dataSottoscrizione"></div>
+          <div class="campo c6"><label class="et">Luogo della firma (facoltativo)</label><input type="text" data-campo="luogo" placeholder="es. Napoli"></div>
+          <div class="campo c6 operatore" style="justify-content:flex-end"><span>Operatore: <b id="operatoreNome"></b> <span id="operatoreFirma"></span></span></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>1. Cliente</legend>
+        <div class="griglia">
+          <div class="campo c2"><label class="et">Titolo</label><select data-campo="cliente.titolo" id="titolo"></select></div>
+          <div class="campo c5" style="grid-column: span 5"><label class="et">Nome *</label><input type="text" data-campo="cliente.nome" autocomplete="off"></div>
+          <div class="campo c5" style="grid-column: span 5"><label class="et">Cognome *</label><input type="text" data-campo="cliente.cognome" autocomplete="off"></div>
+          <div class="campo c6"><label class="et">Codice fiscale</label><input type="text" data-campo="cliente.codiceFiscale" maxlength="16" style="text-transform: uppercase" autocomplete="off"></div>
+          <div class="campo c3"><label class="et">Telefono</label><input type="text" data-campo="cliente.telefono" placeholder="333 123 4567"></div>
+          <div class="campo c3"><label class="et">E-mail</label><input type="email" data-campo="cliente.email"></div>
+          <div class="campo c8"><label class="et">Indirizzo (via e numero civico) *</label><input type="text" data-campo="cliente.indirizzo" placeholder="es. Via Arcangelo Ghisleri 28"></div>
+          <div class="campo c4"><label class="et">Scala, interno, presso</label><input type="text" data-campo="cliente.indirizzo2" placeholder="es. Parco Lucrezia"></div>
+          <div class="campo c3"><label class="et">CAP *</label><input type="text" data-campo="cliente.cap" maxlength="5" inputmode="numeric"></div>
+          <div class="campo c6"><label class="et">Comune *</label><input type="text" data-campo="cliente.comune"></div>
+          <div class="campo c3"><label class="et">Provincia (sigla) *</label><input type="text" data-campo="cliente.provincia" maxlength="2" style="text-transform: uppercase"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>2. Fornitura e prezzo</legend>
+        <div id="righe"></div>
+        <div class="totale-riepilogo">
+          <button type="button" class="piccolo secondario" id="btnAggiungiRiga">+ Aggiungi voce</button>
+          <span>Totale contratto (IVA inclusa): <b id="totale">0,00 €</b></span>
+        </div>
+        <div class="griglia" style="margin-top:10px">
+          <div class="campo c12"><label class="et">Nota sotto il totale (vuota = proposta in automatico)</label><textarea data-campo="notaFornitura" id="notaFornitura"></textarea></div>
+          <div class="campo c12"><label class="chk senza"><input type="checkbox" data-campo="spedizioneInclusa"> Spedizione inclusa (frase "Non sono previsti ulteriori addebiti di spedizione")</label></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3. Pagamento</legend>
+        <div class="griglia">
+          <div class="campo c6"><label class="et">Modalità di pagamento</label><select data-campo="pagamento.modalita" id="modalita"></select></div>
+          <div class="campo c3"><label class="et">Acconto alla conferma €</label><input type="text" inputmode="decimal" data-campo="pagamento.acconto" placeholder="0,00"></div>
+          <div class="campo c3 solo-rateale"><label class="et">Numero di rate</label><input type="number" min="2" step="1" data-campo="pagamento.rate"></div>
+          <div class="campo c6 solo-finanziamento"><label class="et">Finanziaria</label><input type="text" data-campo="pagamento.finanziaria" placeholder="HeyLight"></div>
+          <div class="campo c6 solo-finanziamento"><label class="et">Maggiorazione complessiva % (0 = tasso zero)</label><input type="text" inputmode="decimal" data-campo="pagamento.maggiorazione"></div>
+          <div class="campo c12 solo-altro"><label class="et">Descrizione della modalità (stampata nel contratto)</label><textarea data-campo="pagamento.testo"></textarea></div>
+          <div class="c12 suggerimento" id="riepilogoPagamento"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Consegna</legend>
+        <div class="griglia">
+          <div class="campo c6"><label class="et">Nome del destinatario (vuoto = il cliente)</label><input type="text" data-campo="consegna.destinatario"></div>
+          <div class="campo c6"><label class="chk"><input type="checkbox" data-campo="consegna.diversa" id="consegnaDiversa"> Indirizzo di consegna diverso dalla residenza</label></div>
+          <div class="campo c8 solo-consegna"><label class="et">Indirizzo di consegna *</label><input type="text" data-campo="consegna.indirizzo"></div>
+          <div class="campo c4 solo-consegna"><label class="et">Scala, interno, presso</label><input type="text" data-campo="consegna.indirizzo2"></div>
+          <div class="campo c3 solo-consegna"><label class="et">CAP *</label><input type="text" data-campo="consegna.cap" maxlength="5" inputmode="numeric"></div>
+          <div class="campo c6 solo-consegna"><label class="et">Comune *</label><input type="text" data-campo="consegna.comune"></div>
+          <div class="campo c3 solo-consegna"><label class="et">Provincia *</label><input type="text" data-campo="consegna.provincia" maxlength="2" style="text-transform: uppercase"></div>
+          <div class="campo c12"><label class="et">Note sulla consegna (facoltative)</label><input type="text" data-campo="consegna.note" placeholder="es. Consegna al portiere"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>4. Condizioni</legend>
+        <div class="griglia">
+          <div class="campo c4"><label class="chk"><input type="checkbox" data-campo="condizioni.prova"> Prova convenzionale di 30 giorni</label></div>
+          <div class="campo c4"><label class="et">Garanzia (mesi dalla consegna)</label><input type="number" min="24" step="1" data-campo="condizioni.garanziaMesi"></div>
+          <div class="campo c12"><label class="et">Estensione di garanzia concordata (facoltativa)</label><input type="text" data-campo="condizioni.estensione" placeholder="es. Migelino Plus: 4 anni, copre danni accidentali, furto e smarrimento"></div>
+          <div class="campo c12"><label class="et">Condizioni particolari (facoltative, stampate nella sezione 4)</label><textarea data-campo="condizioni.note"></textarea></div>
+        </div>
+      </fieldset>
+
+    </section>
+
+    <section class="anteprima">
+      <div id="esito" class="esito nascosto"></div>
+      <div id="avvisi" class="avvisi"></div>
+      <div class="cornice" id="cornice"><div class="scala" id="scala"><iframe id="anteprima" title="Anteprima del contratto"></iframe></div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+  var RISORSE = <?!= risorseJson ?>;
+  var DATI_INIZIALI = <?!= datiJson ?>;
+  var OPERATORE = <?!= operatoreJson ?>;
+  <?!= nucleoSorgente ?>
+</script>
+<script>
+  var N = contrattoNucleo(RISORSE);
+  var dati = N.normalizza(DATI_INIZIALI || N.datiVuoti());
+  if (DATI_INIZIALI) dati.numero = ''; // riapertura: il numero viene assegnato alla nuova generazione
+  var firma = { nome: (OPERATORE && OPERATORE.nome) || '', immagine: '' };
+  var haScript = typeof google !== 'undefined' && google.script && google.script.run;
+  var ultimoControllo = 0;
+  var timerAnteprima = null;
+  var timerControllo = null;
+  var generato = false;
+
+  function $(id) { return document.getElementById(id); }
+
+  function leggi(percorso) {
+    return percorso.split('.').reduce(function (o, k) { return o === null || o === undefined ? undefined : o[k]; }, dati);
+  }
+
+  function scrivi(percorso, valore) {
+    var p = percorso.split('.');
+    var o = dati;
+    for (var i = 0; i < p.length - 1; i++) {
+      if (o[p[i]] === null || typeof o[p[i]] !== 'object') o[p[i]] = {};
+      o = o[p[i]];
+    }
+    o[p[p.length - 1]] = valore;
+  }
+
+  function stato(testo) { $('stato').textContent = testo || ''; }
+
+  // ------------------------------------------------------------- modulo
+  function riempiSelect(select, voci, valore) {
+    select.innerHTML = '';
+    voci.forEach(function (v) {
+      var o = document.createElement('option');
+      o.value = v.codice;
+      o.textContent = v.nome;
+      select.appendChild(o);
+    });
+    select.value = valore;
+  }
+
+  function riempiModulo() {
+    riempiSelect($('titolo'), N.TITOLI.map(function (t) { return { codice: t, nome: t || '(nessuno)' }; }), dati.cliente.titolo);
+    riempiSelect($('modalita'), N.MODALITA, dati.pagamento.modalita);
+    var campi = document.querySelectorAll('#modulo [data-campo]');
+    for (var i = 0; i < campi.length; i++) {
+      var el = campi[i];
+      var v = leggi(el.getAttribute('data-campo'));
+      if (el.type === 'checkbox') el.checked = !!v;
+      else if (el.tagName === 'SELECT') el.value = v;
+      else el.value = v === undefined || v === null ? '' : (typeof v === 'number' ? numeroPerCampo(v) : v);
+    }
+    $('operatoreNome').textContent = firma.nome || (OPERATORE && OPERATORE.email) || '(non impostato)';
+    $('operatoreFirma').textContent = OPERATORE && OPERATORE.haFirma ? '(firma impostata)' : '(nessuna firma: menu Contratti > Imposta il mio nome e la mia firma)';
+    rendiRighe();
+    aggiornaCondizionali();
+  }
+
+  function numeroPerCampo(n) {
+    return n === 0 ? '' : String(n).replace('.', ',');
+  }
+
+  function rendiRighe() {
+    var c = $('righe');
+    c.innerHTML = '';
+    dati.righe.forEach(function (r, i) {
+      var d = document.createElement('div');
+      d.className = 'riga';
+      d.setAttribute('data-indice', i);
+      d.innerHTML =
+        '<div class="r1">' +
+        '<input type="text" data-riga="' + i + '" data-campo-riga="descrizione" placeholder="Descrizione (es. Oticon Intent 1 - coppia (2 apparecchi))">' +
+        '<input type="number" min="1" step="1" data-riga="' + i + '" data-campo-riga="quantita" title="Quantità">' +
+        '<input type="text" inputmode="decimal" data-riga="' + i + '" data-campo-riga="prezzo" placeholder="Prezzo unit. €" title="Prezzo unitario IVA inclusa">' +
+        '<input type="text" inputmode="decimal" data-riga="' + i + '" data-campo-riga="sconto" placeholder="Sconto €" title="Sconto in euro sulla voce">' +
+        '<label class="chk senza" title="Voce fornita in omaggio: nel contratto compare il valore e lo sconto integrale"><input type="checkbox" data-riga="' + i + '" data-campo-riga="omaggio"> omaggio</label>' +
+        '<button type="button" class="elimina" data-elimina="' + i + '" title="Togli la voce">&#x2715;</button>' +
+        '</div>' +
+        '<div class="r2">' +
+        '<input type="text" data-riga="' + i + '" data-campo-riga="dettaglio" placeholder="Dettaglio sotto la voce (es. Colore selezionato: Honey Beige)">' +
+        '<input type="text" data-riga="' + i + '" data-campo-riga="etichettaSconto" placeholder="Etichetta sconto/omaggio (es. Sconto sulla coppia)">' +
+        '<input type="text" data-riga="' + i + '" data-campo-riga="etichettaDopoSconto" placeholder="Etichetta dopo lo sconto (es. Prezzo della coppia dopo lo sconto)">' +
+        '</div>' +
+        '<div class="r3"><span class="importo"></span><span class="dopo"></span></div>';
+      c.appendChild(d);
+      var ingressi = d.querySelectorAll('[data-campo-riga]');
+      for (var k = 0; k < ingressi.length; k++) {
+        var el = ingressi[k];
+        var nome = el.getAttribute('data-campo-riga');
+        if (el.type === 'checkbox') el.checked = !!r[nome];
+        else if (nome === 'quantita') el.value = r.quantita;
+        else if (nome === 'prezzo' || nome === 'sconto') el.value = numeroPerCampo(r[nome]);
+        else el.value = r[nome] || '';
+      }
+    });
+    aggiornaImportiRighe();
+  }
+
+  function aggiornaImportiRighe() {
+    var righe = document.querySelectorAll('#righe .riga');
+    for (var i = 0; i < righe.length; i++) {
+      var r = N.normalizza({ righe: [dati.righe[i]] }).righe[0];
+      var importo = r.quantita * r.prezzo;
+      var dopo = r.omaggio ? 0 : Math.max(0, importo - Math.min(r.sconto, importo));
+      righe[i].querySelector('.importo').innerHTML = 'Importo: <b>' + N.esc(N.euro(importo)) + '</b>' + (r.quantita > 1 ? ' (' + r.quantita + ' x ' + N.esc(N.euro(r.prezzo)) + ')' : '');
+      righe[i].querySelector('.dopo').innerHTML = r.omaggio ? 'In omaggio: addebito <b>0,00 €</b>' : (r.sconto > 0 ? 'Dopo lo sconto: <b>' + N.esc(N.euro(dopo)) + '</b>' : '');
+      var etichettaDopo = righe[i].querySelector('[data-campo-riga="etichettaDopoSconto"]');
+      etichettaDopo.style.visibility = (!r.omaggio && r.sconto > 0) ? 'visible' : 'hidden';
+    }
+    var calcolo = N.calcola(dati);
+    $('totale').textContent = N.euro(calcolo.totale);
+    $('sottotitolo').placeholder = N.sottotitoloProposto(dati) || 'Es. Oticon Intent 1 - Coppia | SmartCharger incluso gratuitamente';
+    $('notaFornitura').placeholder = N.notaFornituraProposta(dati) || 'Nessuna nota';
+    var pag = calcolo.pagamento;
+    $('riepilogoPagamento').textContent = pag.righe.map(function (x) { return x[0] + ': ' + x[1]; }).join(' · ');
+  }
+
+  function mostra(selettore, visibile) {
+    var el = document.querySelectorAll(selettore);
+    for (var i = 0; i < el.length; i++) el[i].classList.toggle('nascosto', !visibile);
+  }
+
+  function aggiornaCondizionali() {
+    var m = dati.pagamento.modalita;
+    mostra('.solo-rateale', m === 'FINANZIAMENTO' || m === 'RATE');
+    mostra('.solo-finanziamento', m === 'FINANZIAMENTO');
+    mostra('.solo-altro', m === 'ALTRO');
+    mostra('.solo-consegna', !!dati.consegna.diversa);
+  }
+
+  // -------------------------------------------------------------- eventi
+  function valoreDi(el) {
+    if (el.type === 'checkbox') return el.checked;
+    return el.value;
+  }
+
+  function suCambio(e) {
+    var el = e.target;
+    if (!el) return;
+    if (el.hasAttribute('data-campo')) {
+      scrivi(el.getAttribute('data-campo'), valoreDi(el));
+    } else if (el.hasAttribute('data-campo-riga')) {
+      var i = Number(el.getAttribute('data-riga'));
+      if (dati.righe[i]) dati.righe[i][el.getAttribute('data-campo-riga')] = valoreDi(el);
+    } else {
+      return;
+    }
+    if (el.tagName === 'SELECT' || el.type === 'checkbox') aggiornaCondizionali();
+    cambiato();
+  }
+
+  function cambiato() {
+    if (generato) {
+      generato = false;
+      dati.numero = '';
+      $('esito').classList.add('nascosto');
+    }
+    aggiornaImportiRighe();
+    clearTimeout(timerAnteprima);
+    timerAnteprima = setTimeout(aggiornaAnteprima, 150);
+    clearTimeout(timerControllo);
+    timerControllo = setTimeout(controlla, 700);
+    $('btnGenera').disabled = true;
+    stato('Controllo in corso...');
+  }
+
+  $('modulo').addEventListener('input', suCambio);
+  $('modulo').addEventListener('change', suCambio);
+  $('modulo').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-elimina]') : null;
+    if (!b) return;
+    var i = Number(b.getAttribute('data-elimina'));
+    dati.righe.splice(i, 1);
+    if (!dati.righe.length) dati.righe.push(N.rigaVuota());
+    rendiRighe();
+    cambiato();
+  });
+  $('btnAggiungiRiga').addEventListener('click', function () {
+    dati.righe.push(N.rigaVuota());
+    rendiRighe();
+    var ultime = document.querySelectorAll('#righe .riga');
+    var ultima = ultime[ultime.length - 1];
+    if (ultima) ultima.querySelector('[data-campo-riga="descrizione"]').focus();
+    cambiato();
+  });
+  $('btnGenera').addEventListener('click', genera);
+  $('btnStampa').addEventListener('click', stampa);
+  window.addEventListener('resize', scalaAnteprima);
+
+  // ----------------------------------------------------------- anteprima
+  // datiMostrati: se presenti, i dati normalizzati dallo script (maiuscole, comune ufficiale, telefono)
+  function aggiornaAnteprima(datiMostrati) {
+    var html = N.html(datiMostrati || dati, { anteprima: true, browser: true, firma: firma });
+    var f = $('anteprima');
+    if ('srcdoc' in f) f.srcdoc = html;
+    else { var d = f.contentWindow.document; d.open(); d.write(html); d.close(); }
+    scalaAnteprima();
+  }
+
+  function scalaAnteprima() {
+    var cornice = $('cornice');
+    var larghezza = cornice.clientWidth - 16;
+    var k = Math.min(1, larghezza / 830);
+    var s = $('scala');
+    s.style.transform = 'scale(' + k + ')';
+    s.style.width = Math.round(830 * k) + 'px';
+    s.style.height = Math.round(2330 * k) + 'px';
+  }
+
+  // ------------------------------------------------------------ controlli
+  function mostraAvvisi(r) {
+    var c = $('avvisi');
+    c.innerHTML = '';
+    if (!r) return;
+    function voce(classe, simbolo, testo) {
+      var d = document.createElement('div');
+      d.className = 'voce ' + classe;
+      d.innerHTML = '<span>' + simbolo + '</span><span></span>';
+      d.lastChild.textContent = testo;
+      c.appendChild(d);
+    }
+    (r.errori || []).forEach(function (t) { voce('errore', '⛔', t); });
+    (r.avvisi || []).forEach(function (t) { voce('avviso', '⚠️', t); });
+    if (!(r.errori || []).length) voce('ok', '✅', (r.avvisi || []).length ? 'Nessun errore bloccante: controlla gli avvisi, poi Genera PDF.' : 'Tutti i controlli superati.');
+  }
+
+  function controlla() {
+    if (!haScript) {
+      stato('Anteprima locale (senza script): controlli non disponibili.');
+      $('btnGenera').disabled = false;
+      return;
+    }
+    var versione = ++ultimoControllo;
+    google.script.run
+      .withSuccessHandler(function (r) {
+        if (versione !== ultimoControllo) return;
+        mostraAvvisi(r);
+        if (r.dati) { r.dati.numero = dati.numero; aggiornaAnteprima(r.dati); }
+        var ok = !(r.errori || []).length;
+        $('btnGenera').disabled = !ok;
+        stato(ok ? 'Pronto: totale ' + N.euro(r.totale) + '. Puoi generare il PDF.' : 'Ci sono ' + r.errori.length + ' errori da correggere prima di generare il PDF.');
+      })
+      .withFailureHandler(function (e) {
+        if (versione !== ultimoControllo) return;
+        stato('Controllo non riuscito: ' + (e && e.message ? e.message : e));
+      })
+      .contrattoValida(dati);
+  }
+
+  // ------------------------------------------------------------- genera
+  function genera() {
+    if (!haScript) { alert('Il PDF si genera dallo script del Foglio (menu Contratti).'); return; }
+    $('btnGenera').disabled = true;
+    stato('Generazione del PDF in corso (qualche secondo)...');
+    google.script.run
+      .withSuccessHandler(function (r) {
+        generato = true;
+        dati.numero = r.numero;
+        var e = $('esito');
+        e.innerHTML = '';
+        var t = document.createElement('div');
+        t.innerHTML = '<b>Contratto n. ' + N.esc(r.numero) + ' generato</b> (' + N.esc(r.pdfNome) + ', totale ' + N.esc(N.euro(r.totale)) + '). ';
+        e.appendChild(t);
+        var link = document.createElement('div');
+        link.innerHTML = '<a href="' + N.esc(r.pdfUrl) + '">Apri il PDF su Drive</a>' +
+          (r.bozzaUrl ? '<a href="' + N.esc(r.bozzaUrl) + '">Apri la bozza email in Gmail</a>' : '') +
+          '<span style="color:#4b5563">Riga aggiunta nel foglio "Contratti". Modificando i dati si prepara una nuova versione con un nuovo numero.</span>';
+        e.appendChild(link);
+        if (r.avvisi && r.avvisi.length) {
+          var a = document.createElement('div');
+          a.style.marginTop = '4px';
+          a.textContent = 'Avvisi: ' + r.avvisi.join(' · ');
+          e.appendChild(a);
+        }
+        e.classList.remove('nascosto');
+        stato('PDF generato: contratto n. ' + r.numero + '.');
+        aggiornaAnteprima();
+      })
+      .withFailureHandler(function (e) {
+        stato('PDF non generato: ' + (e && e.message ? e.message : e));
+        $('btnGenera').disabled = false;
+      })
+      .contrattoGenera(dati, { bozzaEmail: $('bozzaEmail').checked });
+  }
+
+  // ------------------------------------------------------------- stampa
+  function stampa() {
+    var html = N.html(dati, { browser: true, firma: firma });
+    try {
+      var url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      var w = window.open(url, '_blank');
+      if (w) {
+        setTimeout(function () { try { w.focus(); w.print(); } catch (e) { /* stampa manuale dalla scheda */ } }, 900);
+        return;
+      }
+    } catch (e) { /* passa alla stampa dell'anteprima */ }
+    try {
+      var f = $('anteprima');
+      f.contentWindow.focus();
+      f.contentWindow.print();
+    } catch (e2) {
+      stato('Stampa non disponibile in questa finestra: usa "Genera PDF" e apri il file su Drive.');
+    }
+  }
+
+  // --------------------------------------------------------------- avvio
+  riempiModulo();
+  aggiornaAnteprima();
+  controlla();
+  if (haScript && OPERATORE && OPERATORE.haFirma) {
+    google.script.run.withSuccessHandler(function (f) {
+      if (f && f.immagine) { firma.immagine = f.immagine; firma.nome = f.nome || firma.nome; aggiornaAnteprima(); }
+      else if (f && f.errore) stato(f.errore);
+    }).contrattoFirma();
+  }
+</script>
+</body>
+</html>

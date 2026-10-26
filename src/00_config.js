@@ -7,7 +7,7 @@
  */
 
 var CONFIG = {
-  VERSIONE: '1.0.0',
+  VERSIONE: '1.1.0',
 
   // Etichette Gmail (la parte prima di "/" crea il gruppo "Anagrafica").
   ETICHETTE: {
@@ -73,7 +73,22 @@ var CONFIG = {
     REGISTRO: 'Registro',
     COLLAUDO: 'Collaudo',
     COLLAUDO_CASI: 'Collaudo_casi',
-    RIEPILOGO: 'Riepilogo collaudo'
+    RIEPILOGO: 'Riepilogo collaudo',
+    CONTRATTI: 'Contratti'
+  },
+
+  // Contratto di vendita (testi fissi dell'intestazione; modificabili dalle Proprietà dello script)
+  CONTRATTO: {
+    VENDITORE: 'Migelino AG, Blegistrasse 13, CH-6340 Baar (Svizzera), operante in Italia come Migelino Italia.',
+    FIRMA_PER: 'Firma per Migelino AG',
+    TAGLINE: 'Soluzioni Acustiche Avanzate & Teleaudiologia',
+    PIE: 'Migelino AG | www.migelino.it | support@migelino.it | +39 0533 781000',
+    EMAIL_SUPPORTO: 'support@migelino.it',
+    SITO: 'www.migelino.it',
+    CARTELLA_DRIVE: 'Contratti',
+    PROVA_GIORNI: 30,
+    GARANZIA_MESI: 24,
+    MAX_RIGHE: 10
   }
 };
 
@@ -89,7 +104,15 @@ var CHIAVI = {
   EMAIL_UFFICIO_ORDINI: 'EMAIL_UFFICIO_ORDINI', // usata solo dal collaudo sullo storico
   SOGLIA_CONFERMA: 'SOGLIA_CONFERMA',
   SOGLIA_CAMPO: 'SOGLIA_CAMPO',
-  ULTIMO_CONTROLLO: 'ULTIMO_CONTROLLO'
+  ULTIMO_CONTROLLO: 'ULTIMO_CONTROLLO',
+  // Contratti (proprietà dello script, condivise)
+  CONTRATTI_CARTELLA_ID: 'CONTRATTI_CARTELLA_ID',     // cartella Drive dei PDF (creata da sola se vuota)
+  CONTRATTO_ULTIMO_NUMERO: 'CONTRATTO_ULTIMO_NUMERO', // es. 2026/0012
+  CONTRATTO_VENDITORE: 'CONTRATTO_VENDITORE',         // sovrascrive CONFIG.CONTRATTO.VENDITORE
+  CONTRATTO_PIE: 'CONTRATTO_PIE',                     // sovrascrive CONFIG.CONTRATTO.PIE
+  // Contratti (proprietà dell'utente: una per operatore)
+  FIRMATARIO_NOME: 'FIRMATARIO_NOME',
+  FIRMA_FILE_ID: 'FIRMA_FILE_ID'
 };
 
 var Impostazioni = {

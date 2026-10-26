@@ -13,6 +13,14 @@ const pacchetto = JSON.parse(readFileSync(path.join(radice, 'package.json'), 'ut
 
 const file = readdirSync(src).filter((f) => f.endsWith('.js')).sort();
 const parti = file.map((f) => `// ===== ${f} =====\n` + readFileSync(path.join(src, f), 'utf8').trim() + '\n');
+
+// Le pagine HTML (src/html/*.html) vengono incorporate come costanti HTML_<NOME>, così il
+// file da incollare in Apps Script resta uno solo. Es. src/html/contratto.html -> HTML_CONTRATTO.
+const cartellaHtml = path.join(src, 'html');
+const fileHtml = existsSync(cartellaHtml) ? readdirSync(cartellaHtml).filter((f) => f.endsWith('.html')).sort() : [];
+export const nomeCostanteHtml = (f) => 'HTML_' + f.replace(/\.html$/, '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+const partiHtml = fileHtml.map((f) =>
+  `// ===== html/${f} (incorporato dal build) =====\nvar ${nomeCostanteHtml(f)} = ${JSON.stringify(readFileSync(path.join(cartellaHtml, f), 'utf8'))};\n`);
 const intestazione = [
   '/**',
   ' * MIGELINO - Anagrafica automatica da Gmail a Shopify',
@@ -21,7 +29,7 @@ const intestazione = [
   ' */',
   ''
 ].join('\n');
-const bundle = intestazione + parti.join('\n');
+const bundle = intestazione + parti.concat(partiHtml).join('\n');
 
 new vm.Script(bundle, { filename: 'Anagrafica.gs' }); // errore se la sintassi non è valida
 
@@ -38,5 +46,5 @@ if (process.argv.includes('--check')) {
   mkdirSync(dist, { recursive: true });
   writeFileSync(path.join(dist, 'Anagrafica.gs'), bundle, 'utf8');
   writeFileSync(path.join(dist, 'appsscript.json'), manifest, 'utf8');
-  console.log(`Scritto dist/Anagrafica.gs (${file.length} file, ${bundle.length} caratteri).`);
+  console.log(`Scritto dist/Anagrafica.gs (${file.length} file + ${fileHtml.length} pagine HTML, ${bundle.length} caratteri).`);
 }

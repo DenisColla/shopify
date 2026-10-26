@@ -95,9 +95,17 @@ export function fogliFinti() {
     getSheetByName: (n) => (fogli.has(n) ? fogli.get(n) : null),
     insertSheet: (n) => foglio(n)
   };
+  // Foglio attivo e riga selezionata (per "Riapri il contratto della riga selezionata").
+  const attivo = { nome: '', riga: 0 };
+  const fogliAttivo = () => ({
+    getName: () => attivo.nome,
+    getActiveRange: () => (attivo.riga ? { getRow: () => attivo.riga } : null),
+    getRange: (r, c) => ({ getValue: () => { const f = fogli.get(attivo.nome); return f && f.righe[r - 1] ? f.righe[r - 1][c - 1] : ''; } })
+  });
   return {
     fogli,
-    SpreadsheetApp: { getActiveSpreadsheet: () => documento, openById: () => documento }
+    attivo,
+    SpreadsheetApp: { getActiveSpreadsheet: () => documento, openById: () => documento, getActiveSheet: fogliAttivo }
   };
 }
 
@@ -190,4 +198,100 @@ export function shopifyFinto(opzioni = {}) {
     }
   }
   return { operazioni, risposta };
+}
+
+// ------------------------------------------------------------- contratti
+/** Drive finto: cartelle e file in memoria. opzioni.immagini = { fileId: { tipo, byte } } per le firme. */
+export function driveFinto(opzioni = {}) {
+  const file = new Map();
+  const cartelle = new Map();
+  let contatore = 0;
+  const nuovoId = (prefisso) => prefisso + '-' + (++contatore);
+  function blobFinto(nome, tipo, byte) {
+    return {
+      getName: () => nome, getContentType: () => tipo, getBytes: () => byte,
+      setName(n) { nome = n; return this; },
+      getAs: (t) => blobFinto(nome.replace(/\.html$/, '.pdf'), t, Buffer.from('%PDF-finto ' + byte.toString())),
+      getDataAsString: () => byte.toString()
+    };
+  }
+  function cartella(id, nome, genitore) {
+    const sotto = new Map();
+    const c = {
+      getId: () => id, getName: () => nome, getUrl: () => 'https://drive.google.com/drive/folders/' + id,
+      getFoldersByName: (n) => iteratore(sotto.has(n) ? [sotto.get(n)] : []),
+      createFolder: (n) => { const f = cartella(nuovoId('cartella'), n, c); sotto.set(n, f); cartelle.set(f.getId(), f); return f; },
+      createFile: (blob) => {
+        const id = nuovoId('file');
+        const f = { id, nome: blob.getName(), tipo: blob.getContentType(), byte: blob.getBytes(), cartella: c,
+          getId: () => id, getName: () => blob.getName(), getUrl: () => 'https://drive.google.com/file/d/' + id + '/view', getBlob: () => blob };
+        file.set(id, f);
+        return f;
+      },
+      getParents: () => iteratore(genitore ? [genitore] : [])
+    };
+    return c;
+  }
+  const iteratore = (lista) => { let i = 0; return { hasNext: () => i < lista.length, next: () => lista[i++] }; };
+  const radice = cartella('radice', 'Il mio Drive', null);
+  cartelle.set('radice', radice);
+  const cartellaFoglio = radice.createFolder('Gestionale');
+  const foglio = { getId: () => 'foglio-finto', getParents: () => iteratore([cartellaFoglio]) };
+  Object.entries(opzioni.immagini || {}).forEach(([id, img]) => {
+    file.set(id, { getId: () => id, getName: () => id + '.png', getBlob: () => blobFinto(id + '.png', img.tipo || 'image/png', img.byte || Buffer.from('png-finto')) });
+  });
+  return {
+    file, cartelle, cartellaFoglio,
+    DriveApp: {
+      getRootFolder: () => radice,
+      getFolderById: (id) => { if (!cartelle.has(id)) throw new Error('Cartella non trovata: ' + id); return cartelle.get(id); },
+      getFileById: (id) => {
+        if (id === 'foglio-finto') return foglio;
+        if (!file.has(id)) throw new Error('File non trovato: ' + id);
+        return file.get(id);
+      }
+    },
+    Utilities: {
+      newBlob: (contenuto, tipo, nome) => blobFinto(nome || 'blob', tipo, Buffer.from(String(contenuto)))
+    }
+  };
+}
+
+/** HtmlService finto: valuta gli scriptlet <?!= espr ?> e <?= espr ?> con le variabili assegnate al template. */
+export function htmlServiceFinto() {
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return {
+    HtmlService: {
+      createTemplate: (sorgente) => {
+        const t = {
+          evaluate() {
+            const html = sorgente.replace(/<\?(!?)=\s*([\s\S]*?)\s*\?>/g, (m, grezzo, espr) => {
+              const valore = new Function('t', 'with (t) { return (' + espr + '); }')(t);
+              return grezzo ? String(valore) : esc(valore);
+            });
+            const uscita = { html, titolo: '', larghezza: 0, altezza: 0,
+              setTitle(x) { this.titolo = x; return this; }, setWidth(x) { this.larghezza = x; return this; },
+              setHeight(x) { this.altezza = x; return this; }, getContent: () => html };
+            return uscita;
+          }
+        };
+        return t;
+      }
+    }
+  };
+}
+
+/** Gmail finta minima per le bozze dei contratti. */
+export function bozzeGmailFinte() {
+  const bozze = [];
+  return {
+    bozze,
+    GmailApp: {
+      createDraft: (a, oggetto, corpo, opzioni) => {
+        const id = 'bozza-' + (bozze.length + 1);
+        bozze.push({ a, oggetto, corpo, opzioni });
+        return { getId: () => id, getMessageId: () => 'msg-' + id };
+      }
+    }
+  };
 }
