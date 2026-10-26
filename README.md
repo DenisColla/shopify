@@ -1,4 +1,13 @@
-# Anagrafica automatica Gmail → Shopify (Migelino Italia)
+# Gestionale Migelino: anagrafica automatica Gmail → Shopify e contratti di vendita
+
+Un solo Foglio Google con uno script Apps Script, due funzioni:
+
+1. **Anagrafica automatica** (sotto): dalle mail di conferma dei pazienti all'anagrafica cliente su Shopify.
+2. **Contratto di vendita** (menu *Contratti*): modulo compilabile con anteprima dal vivo, controlli su codice
+   fiscale e indirizzo, PDF numerato su Drive, riga nel Registro e bozza email facoltativa.
+   Guida: [docs/CONTRATTI.md](docs/CONTRATTI.md).
+
+## Anagrafica automatica
 
 Quando un paziente **conferma per email** l'acquisto o la prova degli apparecchi acustici, il sistema
 crea da solo la sua **anagrafica cliente su Shopify**, leggendo le mail e i documenti allegati
@@ -68,7 +77,9 @@ La modalità vale per tutte le caselle.
 
 ## Documentazione
 
-- [docs/PIANO.md](docs/PIANO.md): piano approvato, architettura e fasi
+- [docs/CONTRATTI.md](docs/CONTRATTI.md): contratto di vendita, guida all'uso
+- [docs/PIANO-CONTRATTI.md](docs/PIANO-CONTRATTI.md): piano della funzione contratti e scelte fatte
+- [docs/PIANO.md](docs/PIANO.md): piano approvato dell'anagrafica automatica, architettura e fasi
 - [docs/INSTALLAZIONE.md](docs/INSTALLAZIONE.md): installazione passo passo (circa 15 minuti)
 - [docs/TARATURA.md](docs/TARATURA.md): regole di riconoscimento della conferma ed esempi validati
 - [docs/CONVENZIONE-SHOPIFY.md](docs/CONVENZIONE-SHOPIFY.md): come si compila l'anagrafica su Shopify
@@ -76,8 +87,9 @@ La modalità vale per tutte le caselle.
 ## Struttura del repository
 
 ```
-src/          sorgenti Apps Script (un modulo per file)
-dist/         file unico da incollare in Apps Script (generato: npm run build)
+src/          sorgenti Apps Script (un modulo per file); src/html/ le pagine delle finestre
+gestionale/   scheda «Contratto» per il gestionale web (stesso nucleo), con lo script che la innesta nella pagina
+dist/         file unico da incollare in Apps Script (generato: npm run build, incorpora anche le pagine HTML)
 tests/        test automatici con dati inventati (npm test)
 tools/        build e generazione della tabella comuni
 docs/         documentazione
@@ -95,4 +107,6 @@ Sviluppo: `npm test` esegue i test, `npm run build` rigenera `dist/`. La CI su G
   indicato il fornitore di servizi di intelligenza artificiale.
 - Il Registro in modalità LIVE contiene solo esiti e nomi dei campi; in modalità OMBRA contiene anche la proposta
   (con i dati), per confrontarla con il lavoro dell'ufficio: a collaudo finito si può svuotare.
+- Il foglio **Contratti** contiene i dati dei contratti generati (servono per riaprirli) e i link ai PDF su Drive:
+  il Foglio va condiviso solo con l'ufficio. Le firme degli operatori restano su Drive, mai nel codice.
 - Tabella dei comuni: [comuni-json](https://github.com/matteocontrini/comuni-json) di Matteo Contrini (dati ISTAT e ANCI).
