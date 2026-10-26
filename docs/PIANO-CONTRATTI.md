@@ -129,7 +129,7 @@ consegna, producendo un PDF di esempio da approvare.
 
 | Scelta | Decisione |
 |---|---|
-| Sede della funzione | Menu **Contratti** nel Foglio del gestionale; `doGet` pronto per la pubblicazione come app web |
+| Sede della funzione | Menu **Contratti** nel Foglio del gestionale (`doGet` pronto per l'app web) **e** scheda «Contratto» nel gestionale web su Cloudflare (richiesta del 26/10 pomeriggio, vedi `gestionale/README.md`), con lo stesso nucleo |
 | Precompilazione | **Nessuna: tutto a mano** (decisione di Denis). Le sezioni 5 e la fase 3 di questo piano non sono state realizzate |
 | Numero del preventivo | Campo libero, anche vuoto |
 | Numerazione del contratto | Progressiva per anno, es. `2026/0001`, nelle Proprietà dello script |

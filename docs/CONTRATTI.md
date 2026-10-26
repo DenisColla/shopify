@@ -57,6 +57,13 @@ selezionata**: la finestra si apre con i dati salvati (colonna "Dati"), pronti p
   contratto di riferimento. Eventuali modifiche di merito sono a carico di Migelino e del suo consulente.
 - Numerazione: proprietà `CONTRATTO_ULTIMO_NUMERO` (es. `2026/0012`); si azzera da sola al cambio di anno.
 
+## La stessa scheda nel gestionale web
+
+Il contratto è disponibile anche come scheda **Contratto** del gestionale web (Generatore documenti su Cloudflare),
+con lo stesso nucleo di calcoli e testi: modulo, anteprima e PDF seguono le convenzioni di quel programma
+(protocollo come numero del contratto, timbro e firma del profilo, storico locale). Sorgenti e procedura di
+pubblicazione in [`gestionale/README.md`](../gestionale/README.md).
+
 ## Pubblicazione come pagina web (facoltativa)
 
 La stessa finestra può essere pubblicata come **app web** con un proprio indirizzo, senza aprire il Foglio:

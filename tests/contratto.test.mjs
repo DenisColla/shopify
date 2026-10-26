@@ -99,6 +99,22 @@ test('Calcolo della fornitura: sconto, omaggio e totale coincidono con il PDF di
   assert.match(n.notaFornituraProposta(datiEsempio(ctx)), /In omaggio: Oticon SmartCharger.*valore 229,00 €, importo addebitato 0,00 €.*Non sono previsti ulteriori addebiti di spedizione/);
 });
 
+test('Testi pronti per chi disegna il contratto senza HTML: condizioni, accettazione, consegna, indici delle righe', () => {
+  const ctx = creaAmbiente().ctx;
+  const n = nucleo(ctx);
+  const c = n.calcola(datiEsempio(ctx));
+  assert.deepEqual(valore(c.righe.map((r) => r.indice)), [0, 0, 0, 0, 1, 1]);
+  const t = n.testi(c);
+  assert.deepEqual(valore(t.condizioni.map((p) => p[0])), ['Configurazione e assistenza.', 'Conclusione e consegna.', 'Prova e restituzione.', 'Garanzia e diritti.']);
+  assert.match(t.condizioni[1][1], /dall'approvazione del finanziamento/);
+  assert.match(t.accettazione, /Le parti accettano la fornitura/);
+  assert.match(t.privacy, /www\.migelino\.it/);
+  assert.equal(t.consegnaIndirizzo, 'via appia nuova 100, Scala B, 00183 roma (RM)');
+  assert.equal(t.consegnaDestinatario, 'Luigi Rossi');
+  assert.match(t.sottotitolo, /^Oticon Intent 1/);
+  assert.match(t.notaFornitura, /^In omaggio/);
+});
+
 test('Modalità di pagamento: bonifico, carta, rate Migelino, altro e acconto', () => {
   const ctx = creaAmbiente().ctx;
   const n = nucleo(ctx);

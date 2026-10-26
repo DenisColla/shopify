@@ -305,17 +305,18 @@ function contrattoNucleo(risorse) {
     var righe = [];
     var totale = 0;
     var omaggi = [];
-    righeCompilate(dati).forEach(function (r) {
+    dati.righe.forEach(function (r, indice) {
+      if (!r.descrizione && !(r.prezzo > 0)) return;
       var importo = arrotonda(r.quantita * r.prezzo);
-      righe.push({ testo: r.descrizione || RIGA_VUOTA, importo: importo, tipo: 'voce' });
-      if (r.dettaglio) righe.push({ testo: r.dettaglio, importo: null, tipo: 'dettaglio' });
+      righe.push({ testo: r.descrizione || RIGA_VUOTA, importo: importo, tipo: 'voce', indice: indice });
+      if (r.dettaglio) righe.push({ testo: r.dettaglio, importo: null, tipo: 'dettaglio', indice: indice });
       if (r.omaggio) {
-        righe.push({ testo: r.etichettaSconto || 'Omaggio - sconto integrale', importo: -importo, tipo: 'omaggio' });
+        righe.push({ testo: r.etichettaSconto || 'Omaggio - sconto integrale', importo: -importo, tipo: 'omaggio', indice: indice });
         omaggi.push({ descrizione: r.descrizione, valore: importo });
       } else if (r.sconto > 0) {
         var sconto = Math.min(r.sconto, importo);
-        righe.push({ testo: r.etichettaSconto || 'Sconto', importo: -sconto, tipo: 'sconto' });
-        righe.push({ testo: r.etichettaDopoSconto || 'Prezzo dopo lo sconto', importo: arrotonda(importo - sconto), tipo: 'subtotale' });
+        righe.push({ testo: r.etichettaSconto || 'Sconto', importo: -sconto, tipo: 'sconto', indice: indice });
+        righe.push({ testo: r.etichettaDopoSconto || 'Prezzo dopo lo sconto', importo: arrotonda(importo - sconto), tipo: 'subtotale', indice: indice });
         totale += importo - sconto;
       } else {
         totale += importo;
@@ -390,6 +391,21 @@ function contrattoNucleo(risorse) {
 
   function testoPrivacy() {
     return 'Informativa privacy disponibile su ' + (SITO || 'richiesta') + '. L\'eventuale consenso al trattamento dei dati sanitari per il servizio remoto è raccolto separatamente.';
+  }
+
+  /** Testi delle sezioni 4 e 5 e consegna, già adattati ai dati: per chi disegna il contratto senza l'HTML (es. jsPDF). */
+  function testi(c) {
+    var dati = c.dati;
+    var consegna = dati.consegna.diversa ? dati.consegna : dati.cliente;
+    return {
+      condizioni: testiCondizioni(c),
+      accettazione: TESTO_ACCETTAZIONE,
+      privacy: testoPrivacy(),
+      consegnaIndirizzo: indirizzoCompleto(consegna),
+      consegnaDestinatario: dati.consegna.destinatario || str(dati.cliente.nome + ' ' + dati.cliente.cognome),
+      sottotitolo: dati.sottotitolo || sottotitoloProposto(dati),
+      notaFornitura: dati.notaFornitura || notaFornituraProposta(dati)
+    };
   }
 
   // --------------------------------------------------------------------- HTML
@@ -554,6 +570,8 @@ function contrattoNucleo(risorse) {
     calcola: calcola,
     pianoRate: pianoRate,
     html: html,
+    testi: testi,
+    indirizzoCompleto: indirizzoCompleto,
     sottotitoloProposto: sottotitoloProposto,
     notaFornituraProposta: notaFornituraProposta,
     nomeCliente: nomeCliente,

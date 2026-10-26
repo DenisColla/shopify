@@ -88,6 +88,7 @@ La modalità vale per tutte le caselle.
 
 ```
 src/          sorgenti Apps Script (un modulo per file); src/html/ le pagine delle finestre
+gestionale/   scheda «Contratto» per il gestionale web (stesso nucleo), con lo script che la innesta nella pagina
 dist/         file unico da incollare in Apps Script (generato: npm run build, incorpora anche le pagine HTML)
 tests/        test automatici con dati inventati (npm test)
 tools/        build e generazione della tabella comuni
