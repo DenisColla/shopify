@@ -18,6 +18,7 @@ export class ProprietaFinte {
   constructor(iniziali = {}) { this.dati = { ...iniziali }; }
   getProperty(k) { return Object.prototype.hasOwnProperty.call(this.dati, k) ? this.dati[k] : null; }
   setProperty(k, v) { this.dati[k] = String(v); return this; }
+  setProperties(valori) { Object.keys(valori).forEach((k) => { this.dati[k] = String(valori[k]); }); return this; }
   deleteProperty(k) { delete this.dati[k]; return this; }
   getProperties() { return { ...this.dati }; }
   getKeys() { return Object.keys(this.dati); }
