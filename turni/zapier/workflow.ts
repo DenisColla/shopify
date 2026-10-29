@@ -134,8 +134,8 @@ const workflow = defineDurable<unknown, unknown>("turni-support-migelino-ch", as
       })
       .catch(() => false);
 
-  // Seguito di una conversazione già assegnata: niente giro e niente blocco. Un messaggio che porta già
-  // il proprio Turno/<nome> (tentativo precedente) passa invece dal blocco, per completare il giro se serve.
+  // Seguito di una conversazione già assegnata: niente giro e niente blocco. Tutto il resto (anche un messaggio
+  // che porta già il proprio Turno/<nome>) viene riletto sotto blocco da scegli-turno.
   let assegnazione: { nome: string; seguito: boolean } | null = await ctx
     .step({
       name: "leggi-conversazione",
