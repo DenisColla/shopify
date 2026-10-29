@@ -7,16 +7,16 @@
  * cliente ha un solo interlocutore. Il turno è scritto sulla conversazione come
  * etichetta Gmail (es. "Turno/Marco"): cambiandola a mano si riassegna la conversazione.
  *
- * Gira ogni minuto con l'account della casella condivisa. File autonomo, separato
+ * Gira ogni minuto con l'account della casella condivisa (support@migelino.ch). File autonomo, separato
  * dall'Anagrafica. Installazione: turni/README.md
  */
 
 var TURNI = {
-  // Ordine del giro. Prima di "installaTurni" sostituire gli indirizzi DA_COMPILARE.
+  // Ordine del giro.
   SQUADRA: [
     { nome: 'Denis', email: 'denis@migelino.it' },
-    { nome: 'Marco', email: 'DA_COMPILARE' },
-    { nome: 'Silvia', email: 'DA_COMPILARE' }
+    { nome: 'Marco', email: 'marcoz@migelino.it' },
+    { nome: 'Silvia', email: 'silvia@migelino.it' }
   ],
   STESSA_PERSONA_PER_CONVERSAZIONE: true, // false = turno puro: ogni singola mail va al collega successivo
   RISPOSTA_AL_CLIENTE: true,               // "Rispondi" sull'inoltro scrive al cliente, non alla casella condivisa

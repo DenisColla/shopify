@@ -1,6 +1,6 @@
 # Turni della casella condivisa
 
-Ogni mail che arriva alla casella condivisa viene **inoltrata a turno** a un collega:
+Ogni mail che arriva alla casella condivisa **support@migelino.ch** viene **inoltrata a turno** a un collega:
 Denis → Marco → Silvia → Denis → …
 
 - **Una conversazione = un collega.** Se il cliente risponde nella stessa conversazione, la risposta va allo stesso
@@ -20,12 +20,12 @@ Denis → Marco → Silvia → Denis → …
 
 Requisito: la casella condivisa è un account Google Workspace (con accesso a Gmail), non un gruppo Google.
 
-1. Accedi a [script.google.com](https://script.google.com) **con l'account della casella condivisa** →
+1. Accedi a [script.google.com](https://script.google.com) **con l'account support@migelino.ch** →
    **Nuovo progetto** → chiamalo `Turni casella condivisa`.
 2. Cancella il contenuto di `Codice.gs` e incolla tutto [Turni.gs](Turni.gs).
-3. In cima al file, in `SQUADRA`, scrivi gli indirizzi di Marco e Silvia al posto di `DA_COMPILARE` (l'ordine
-   della lista è l'ordine del giro). Salva.
-4. In alto scegli la funzione **installaTurni** → **Esegui** → autorizza con l'account della casella condivisa.
+3. In cima al file, `SQUADRA` contiene già denis@, marcoz@ e silvia@migelino.it (l'ordine della lista è
+   l'ordine del giro): controlla e salva.
+4. In alto scegli la funzione **installaTurni** → **Esegui** → autorizza con l'account support@migelino.ch.
    Se Google mostra "app non verificata": *Avanzate → Vai a Turni casella condivisa*.
 5. Prova: manda una mail alla casella condivisa da un indirizzo esterno. Entro un minuto arriva a Denis, con
    etichetta `Turno/Denis` nella casella condivisa. La successiva arriva a Marco.
