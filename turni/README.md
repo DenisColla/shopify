@@ -1,5 +1,30 @@
 # Turni della casella condivisa
 
+> **Versione attiva: Zapier** (workflow durevole `Turni support@migelino.ch → Denis, Marco, Silvia`,
+> sorgente in [zapier/](zapier/)). Lo script Apps Script qui sotto resta come alternativa: **non installarlo
+> insieme a Zapier**, altrimenti ogni mail arriva due volte.
+
+## Versione Zapier (attiva)
+
+- **Trigger:** Gmail *New Email* sulla Posta in arrivo di support@migelino.ch (controllo periodico di Zapier).
+- **Giro:** l'etichetta `Turno/➜ prossimo: <nome>` in support@ dice chi riceve la prossima conversazione nuova.
+  Per cambiare il prossimo basta rinominarla (es. `Turno/➜ prossimo: Silvia`).
+- **Conversazioni:** etichetta `Turno/Denis`, `Turno/Marco`, `Turno/Silvia`; le risposte del cliente vanno allo stesso
+  collega. Per riassegnare: togliere l'etichetta e mettere quella del nuovo collega.
+- **Mail arrivate insieme:** un blocco (etichetta nascosta `Turno/🔒 assegnazione in corso`, creata e tolta in pochi
+  secondi) fa assegnare una conversazione alla volta: nessun collega salta il turno, nessuna conversazione divisa.
+- **Inoltro nativo Gmail** con allegati e formattazione; mittente mostrato come "<cliente> via Support",
+  "Rispondi" scrive al cliente. Se gli allegati non passano si inoltra senza, con un avviso; se non passa nulla:
+  etichetta `Turno/⛔ Non inoltrata` in support@ ed esecuzione segnata come fallita in Zapier.
+- **Mai inoltrate:** mail della casella stessa, dei tre colleghi, avvisi di mancata consegna; nessun doppione se il
+  collega è già in copia o se un tentativo viene ripetuto.
+- **Squadra e ordine:** `SQUADRA` in [zapier/lib/turni.ts](zapier/lib/turni.ts) (modifica dall'editor Zapier o qui e
+  ripubblicazione). Per fermare tutto: disattivare il workflow in Zapier.
+- Test: `tests/turni-zapier.test.mjs` (logica) e `tests/turni-zapier-workflow.test.mjs` (flusso completo su una Gmail
+  simulata: mail simultanee, blocco abbandonato, errori, doppioni).
+
+## Versione Apps Script (alternativa)
+
 Ogni mail che arriva alla casella condivisa **support@migelino.ch** viene **inoltrata a turno** a un collega:
 Denis → Marco → Silvia → Denis → …
 

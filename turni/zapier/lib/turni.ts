@@ -2,6 +2,7 @@
 // (provata da tests/turni-zapier.test.mjs). Le chiamate a Gmail stanno in ../workflow.ts.
 
 export type Persona = { nome: string; email: string };
+export type Etichetta = { id: string; name: string };
 
 export const CASELLA = "support@migelino.ch";
 
@@ -14,15 +15,59 @@ export const SQUADRA: Persona[] = [
 
 export const ETICHETTA = "Turno";
 export const ETICHETTA_ERRORE = "Turno/⛔ Non inoltrata";
+// Chi riceve la prossima conversazione nuova: si legge (e si può cambiare a mano) dal nome dell'etichetta.
+export const PREFISSO_PROSSIMO = "Turno/➜ prossimo: ";
+// Blocco: una sola esecuzione alla volta assegna una conversazione nuova (Gmail rifiuta un'etichetta doppia).
+export const BLOCCO = "Turno/🔒 assegnazione in corso";
 const MITTENTI_ESCLUSI = [/mailer-daemon/i, /postmaster/i]; // evita giri infiniti con le mail di errore
 
 export function nomeEtichetta(p: Persona): string {
   return `${ETICHETTA}/${p.nome}`;
 }
 
-/** Etichette da tenere pronte nella casella condivisa (la radice prima delle sottoetichette). */
+export function etichettaProssimo(p: Persona): string {
+  return PREFISSO_PROSSIMO + p.nome;
+}
+
+/** Etichette fisse da tenere pronte nella casella condivisa (la radice prima delle sottoetichette). */
 export function tutteLeEtichette(): string[] {
   return [ETICHETTA, ...SQUADRA.map(nomeEtichetta), ETICHETTA_ERRORE];
+}
+
+/**
+ * Nome → ID per le etichette fisse. Gmail confronta i nomi senza badare alle maiuscole:
+ * "turno/denis" creata a mano vale come "Turno/Denis".
+ */
+export function mappaEtichette(etichette: Etichetta[]): { ids: Record<string, string>; mancanti: string[] } {
+  const perNome = new Map(etichette.map((l) => [String(l.name).toLowerCase(), l.id]));
+  const ids: Record<string, string> = {};
+  const mancanti: string[] = [];
+  for (const nome of tutteLeEtichette()) {
+    const id = perNome.get(nome.toLowerCase());
+    if (id) ids[nome] = id;
+    else mancanti.push(nome);
+  }
+  return { ids, mancanti };
+}
+
+export function trovaEtichetta(etichette: Etichetta[], nome: string): Etichetta | null {
+  return etichette.find((l) => String(l.name).toLowerCase() === nome.toLowerCase()) ?? null;
+}
+
+/** Etichetta "➜ prossimo" (anche rinominata a mano con maiuscole diverse), oppure null. */
+export function etichettaDelProssimo(etichette: Etichetta[]): Etichetta | null {
+  const p = PREFISSO_PROSSIMO.toLowerCase().trim();
+  return etichette.find((l) => String(l.name).toLowerCase().startsWith(p)) ?? null;
+}
+
+/** Collega scritto nell'etichetta "➜ prossimo"; il primo della squadra se manca o non si riconosce. */
+export function prossimoDa(etichetta: Etichetta | null): Persona {
+  const scritto = etichetta ? String(etichetta.name).slice(PREFISSO_PROSSIMO.trim().length).replace(/^\s*/, "") : "";
+  return SQUADRA.find((p) => p.nome.toLowerCase() === scritto.trim().toLowerCase()) ?? SQUADRA[0];
+}
+
+export function dopo(p: Persona): Persona {
+  return SQUADRA[(SQUADRA.findIndex((s) => s.nome === p.nome) + 1) % SQUADRA.length];
 }
 
 /** Indirizzo in minuscolo da "Nome <a@b.it>", "a@b.it" o { email }. */
@@ -49,23 +94,32 @@ export function motivoEsclusione(mittente: string): string | null {
   return null;
 }
 
-/** Collega a cui la conversazione è già assegnata (etichetta Turno/<nome> su un suo messaggio), oppure null. */
-export function giaAssegnato(etichetteConversazione: string[], idEtichette: Record<string, string>): Persona | null {
-  const presenti = new Set(etichetteConversazione);
-  return SQUADRA.find((p) => presenti.has(idEtichette[nomeEtichetta(p)])) ?? null;
+/** Collega indicato da un'etichetta Turno/<nome> tra quelle date, oppure null. */
+export function giaAssegnato(etichetteIds: string[], ids: Record<string, string>): Persona | null {
+  const presenti = new Set(etichetteIds);
+  return SQUADRA.find((p) => presenti.has(ids[nomeEtichetta(p)])) ?? null;
 }
 
 /**
- * Prossimo turno: il collega con meno conversazioni assegnate, a parità il primo nell'ordine della squadra.
- * Partendo da conteggi uguali è esattamente il giro Denis, Marco, Silvia, Denis...; e se due mail arrivano
- * insieme o una conversazione viene riassegnata a mano, il giro si riequilibra da solo.
+ * Assegnazione dalla conversazione letta in Gmail:
+ * - il messaggio stesso ha già Turno/X (esecuzione ripetuta): X, come conversazione nuova;
+ * - un altro messaggio ha Turno/X: X, come seguito;
+ * - altrimenti: conversazione nuova da assegnare con il giro (null).
  */
-export function prossimo(conteggi: number[]): Persona {
-  let migliore = 0;
-  for (let i = 1; i < SQUADRA.length; i++) {
-    if ((conteggi[i] ?? 0) < (conteggi[migliore] ?? 0)) migliore = i;
-  }
-  return SQUADRA[migliore];
+export function assegnazioneEsistente(
+  messaggi: Array<{ id: string; labelIds?: string[] | null }>,
+  messageId: string,
+  ids: Record<string, string>,
+): { persona: Persona; seguito: boolean } | null {
+  const qui = giaAssegnato(messaggi.filter((m) => m.id === messageId).flatMap((m) => m.labelIds ?? []), ids);
+  if (qui) return { persona: qui, seguito: false };
+  const prima = giaAssegnato(messaggi.filter((m) => m.id !== messageId).flatMap((m) => m.labelIds ?? []), ids);
+  return prima ? { persona: prima, seguito: true } : null;
+}
+
+/** Il collega riceve già la mail direttamente (in A o Cc): inoltrarla sarebbe un doppione. */
+export function giaDestinatario(p: Persona, destinatari: unknown[]): boolean {
+  return destinatari.some((d) => indirizzo(d) === p.email);
 }
 
 /** Nome del mittente dell'inoltro: chi ha scritto, così il collega lo riconosce subito nella posta. */
@@ -74,9 +128,15 @@ export function nomeMittente(nomeCliente: string, emailCliente: string): string 
   return `${base.slice(0, 60)} via Support`;
 }
 
-export function nota(p: Persona, cliente: string, seguito: boolean): string {
-  const apertura = seguito
-    ? `Nuovo messaggio nella conversazione già assegnata a te (turno: ${p.nome}).`
-    : `Turno: ${p.nome}. Questa conversazione di support@migelino.ch è assegnata a te.`;
-  return `${apertura}\nRispondendo a questa mail scrivi direttamente a ${cliente}.`;
+/** Nota sopra l'inoltro. L'ultima riga (ID del messaggio originale) serve a riconoscere un inoltro già partito. */
+export function nota(p: Persona, cliente: string, seguito: boolean, senzaAllegati: boolean, messageId: string): string {
+  const righe = [
+    seguito
+      ? `Nuovo messaggio nella conversazione già assegnata a te (turno: ${p.nome}).`
+      : `Turno: ${p.nome}. Questa conversazione di support@migelino.ch è assegnata a te.`,
+    `Rispondendo a questa mail scrivi direttamente a ${cliente}.`,
+  ];
+  if (senzaAllegati) righe.push("Gli allegati non si sono potuti inoltrare (troppo grandi): aprili nella conversazione in support@migelino.ch.");
+  righe.push(`Rif. turno ${messageId}`);
+  return righe.join("\n");
 }
