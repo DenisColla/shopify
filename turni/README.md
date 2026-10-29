@@ -1,8 +1,9 @@
 # Turni della casella condivisa
 
-> **Versione attiva: Zapier** (workflow durevole `Turni support@migelino.ch → Denis, Marco, Silvia`,
-> sorgente in [zapier/](zapier/)). Lo script Apps Script qui sotto resta come alternativa: **non installarlo
-> insieme a Zapier**, altrimenti ogni mail arriva due volte.
+> **Versione attiva: Zapier** — workflow durevole privato `Turni support@migelino.ch → Denis, Marco, Silvia`
+> (ID `01a187d6-b658-7c0d-9324-b7557c49ec25`, [editor](https://zapier.com/workflow/01a187d6-b658-7c0d-9324-b7557c49ec25)),
+> attivo dal 29/10/2026, sorgente in [zapier/](zapier/) (identico alla versione pubblicata). Lo script Apps Script qui
+> sotto resta come alternativa: **non installarlo insieme a Zapier**, altrimenti ogni mail arriva due volte.
 
 ## Versione Zapier (attiva)
 
@@ -18,10 +19,17 @@
   etichetta `Turno/⛔ Non inoltrata` in support@ ed esecuzione segnata come fallita in Zapier.
 - **Mai inoltrate:** mail della casella stessa, dei tre colleghi, avvisi di mancata consegna; nessun doppione se il
   collega è già in copia o se un tentativo viene ripetuto.
-- **Squadra e ordine:** `SQUADRA` in [zapier/lib/turni.ts](zapier/lib/turni.ts) (modifica dall'editor Zapier o qui e
-  ripubblicazione). Per fermare tutto: disattivare il workflow in Zapier.
-- Test: `tests/turni-zapier.test.mjs` (logica) e `tests/turni-zapier-workflow.test.mjs` (flusso completo su una Gmail
-  simulata: mail simultanee, blocco abbandonato, errori, doppioni).
+- **Squadra e ordine:** `SQUADRA` in [zapier/lib/turni.ts](zapier/lib/turni.ts) (modifica qui, poi stessa modifica
+  nell'editor Zapier e ripubblicazione). Per fermare tutto: disattivare il workflow in Zapier.
+- **Errori:** ogni mail che non parte riceve `Turno/⛔ Non inoltrata` in support@ e l'esecuzione risulta fallita in
+  Zapier. Con esito incerto (Zapier non conferma l'invio) la mail resta anche assegnata: controllare in *Inviati* di
+  support@ se la copia è partita.
+- **Inoltro in due fasi:** prima si cerca nella posta inviata di support@ la riga `Rif. turno <id>` della nota (se
+  c'è, la mail è già partita), poi si avvia l'inoltro una volta sola e se ne attende l'esito a parte.
+- Test: `tests/turni-zapier.test.mjs` (logica) e `tests/turni-zapier-workflow.test.mjs` (23 scenari sul flusso
+  completo su una Gmail simulata: raffiche di mail simultanee, blocchi orfani, guasti di Gmail e di Zapier, doppioni,
+  esiti incerti). Prove reali su support@ prima dell'attivazione: conversazione nuova, seguito, ripetizione senza
+  doppione.
 
 ## Versione Apps Script (alternativa)
 
