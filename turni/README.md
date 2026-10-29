@@ -1,0 +1,47 @@
+# Turni della casella condivisa
+
+Ogni mail che arriva alla casella condivisa viene **inoltrata a turno** a un collega:
+Denis → Marco → Silvia → Denis → …
+
+- **Una conversazione = un collega.** Se il cliente risponde nella stessa conversazione, la risposta va allo stesso
+  collega e il giro non avanza. Per il turno puro (ogni singola mail al successivo) mettere
+  `STESSA_PERSONA_PER_CONVERSAZIONE: false`.
+- **Rispondere è diretto:** "Rispondi" sulla mail inoltrata scrive al cliente (anche per i moduli Shopify, che hanno
+  il cliente nel Reply-To). Con `RISPOSTA_AL_CLIENTE: false` si risponde invece alla casella condivisa.
+- **Si vede chi ce l'ha:** nella casella condivisa ogni conversazione ha l'etichetta `Turno/Denis`, `Turno/Marco` o
+  `Turno/Silvia`. Per **riassegnare** basta cambiare l'etichetta (togliere la vecchia): le risposte successive vanno
+  al nuovo collega.
+- **Mai inoltrate:** le mail inviate dalla casella stessa, quelle dei tre colleghi (risposte automatiche, copie) e i
+  messaggi di errore di consegna: niente giri infiniti.
+- Le mail già presenti al momento dell'installazione non vengono inoltrate.
+- Gira ogni minuto, gratis, dentro Google: nessun servizio esterno, nessun PC acceso.
+
+## Installazione (5 minuti)
+
+Requisito: la casella condivisa è un account Google Workspace (con accesso a Gmail), non un gruppo Google.
+
+1. Accedi a [script.google.com](https://script.google.com) **con l'account della casella condivisa** →
+   **Nuovo progetto** → chiamalo `Turni casella condivisa`.
+2. Cancella il contenuto di `Codice.gs` e incolla tutto [Turni.gs](Turni.gs).
+3. In cima al file, in `SQUADRA`, scrivi gli indirizzi di Marco e Silvia al posto di `DA_COMPILARE` (l'ordine
+   della lista è l'ordine del giro). Salva.
+4. In alto scegli la funzione **installaTurni** → **Esegui** → autorizza con l'account della casella condivisa.
+   Se Google mostra "app non verificata": *Avanzate → Vai a Turni casella condivisa*.
+5. Prova: manda una mail alla casella condivisa da un indirizzo esterno. Entro un minuto arriva a Denis, con
+   etichetta `Turno/Denis` nella casella condivisa. La successiva arriva a Marco.
+
+Altre funzioni dal menu **Esegui**: `statoTurni` (prossimo collega e ultimo controllo, in *Registro di
+esecuzione*), `disinstallaTurni` (ferma tutto; reinstallando si riparte dalle mail nuove e il giro continua).
+
+## Da sapere
+
+- **Anagrafica automatica:** le mail inoltrate arrivano ai colleghi da un indirizzo interno e quindi l'Anagrafica le
+  ignora (vedi [INSTALLAZIONE.md](../docs/INSTALLAZIONE.md), sezione E). Se alla casella condivisa scrivono anche
+  pazienti che confermano l'acquisto, attivare l'Anagrafica **anche sulla casella condivisa** (sezione E, punto 2,
+  con l'account della casella condivisa): così legge la mail originale.
+- **Limiti Google:** fino a 1.500 inoltri al giorno per account Workspace. Una mail che non si riesce a inoltrare
+  (es. allegati oltre 25 MB) viene ritentata 3 volte, poi riceve l'etichetta `Turno/⛔ Non inoltrata` e va gestita a
+  mano dalla casella condivisa.
+- **Casella fuori da Google** (es. un provider esterno): impostare sul provider l'inoltro automatico verso un account
+  Google Workspace e installare i turni su quell'account.
+- Ferie di un collega: togliere la sua riga da `SQUADRA` (o spostarla in fondo) e salvare; il giro si adatta.

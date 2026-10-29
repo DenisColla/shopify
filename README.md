@@ -73,11 +73,18 @@ La modalità vale per tutte le caselle.
 - [docs/TARATURA.md](docs/TARATURA.md): regole di riconoscimento della conferma ed esempi validati
 - [docs/CONVENZIONE-SHOPIFY.md](docs/CONVENZIONE-SHOPIFY.md): come si compila l'anagrafica su Shopify
 
+## Turni della casella condivisa
+
+Strumento separato: le mail che arrivano alla casella condivisa vengono inoltrate **a turno** a Denis, Marco e
+Silvia (una conversazione a testa, a giro; le risposte del cliente restano allo stesso collega). Un solo file da
+incollare in Apps Script con l'account della casella condivisa: [turni/README.md](turni/README.md).
+
 ## Struttura del repository
 
 ```
 src/          sorgenti Apps Script (un modulo per file)
 dist/         file unico da incollare in Apps Script (generato: npm run build)
+turni/        turni della casella condivisa (file unico, autonomo)
 tests/        test automatici con dati inventati (npm test)
 tools/        build e generazione della tabella comuni
 docs/         documentazione
