@@ -102,8 +102,8 @@ export function giaAssegnato(etichetteIds: string[], ids: Record<string, string>
 
 /**
  * Assegnazione dalla conversazione letta in Gmail:
- * - il messaggio stesso ha già Turno/X (esecuzione ripetuta): X, come conversazione nuova;
  * - un altro messaggio ha Turno/X: X, come seguito;
+ * - solo il messaggio stesso ha Turno/X (esecuzione ripetuta di una conversazione già assegnata): X;
  * - altrimenti: conversazione nuova da assegnare con il giro (null).
  */
 export function assegnazioneEsistente(
@@ -111,10 +111,58 @@ export function assegnazioneEsistente(
   messageId: string,
   ids: Record<string, string>,
 ): { persona: Persona; seguito: boolean } | null {
-  const qui = giaAssegnato(messaggi.filter((m) => m.id === messageId).flatMap((m) => m.labelIds ?? []), ids);
-  if (qui) return { persona: qui, seguito: false };
   const prima = giaAssegnato(messaggi.filter((m) => m.id !== messageId).flatMap((m) => m.labelIds ?? []), ids);
-  return prima ? { persona: prima, seguito: true } : null;
+  if (prima) return { persona: prima, seguito: true };
+  const qui = giaAssegnato(messaggi.filter((m) => m.id === messageId).flatMap((m) => m.labelIds ?? []), ids);
+  return qui ? { persona: qui, seguito: false } : null;
+}
+
+export type Scelta = {
+  nome: string;
+  seguito: boolean;
+  applica: boolean;         // c'è da scrivere in Gmail
+  aggiungi: string | null;  // ID dell'etichetta Turno/<nome> da mettere sul messaggio
+  rinomina: boolean;        // far avanzare il giro
+  idProssimo: string | null;
+  nuovoNome: string;        // nome che l'etichetta "➜ prossimo" deve avere dopo questa assegnazione
+  doppioni: string[];       // altre etichette "➜ prossimo" da togliere
+};
+
+/**
+ * Decisione sotto blocco (solo lettura). Separata dalla scrittura: se la scrittura va ripetuta,
+ * si ripete identica e il giro non avanza mai due volte né resta fermo.
+ */
+export function scegli(
+  messaggi: Array<{ id: string; labelIds?: string[] | null }>,
+  messageId: string,
+  ids: Record<string, string>,
+  elenco: Etichetta[],
+): Scelta {
+  const p0 = PREFISSO_PROSSIMO.toLowerCase().trim();
+  const segnaposti = elenco.filter((l) => String(l.name).toLowerCase().startsWith(p0));
+  const segnaposto = segnaposti[0] ?? null;
+  const doppioni = segnaposti.slice(1).map((l) => l.id);
+  const a = assegnazioneEsistente(messaggi, messageId, ids);
+  const base = (p: Persona) => ({ nome: p.nome, idProssimo: segnaposto?.id ?? null, nuovoNome: etichettaProssimo(dopo(p)), doppioni });
+  if (a?.seguito) return { ...base(a.persona), seguito: true, applica: false, aggiungi: null, rinomina: false };
+  // Messaggio che porta già il proprio Turno/X: un'assegnazione completata (se applica-turno si interrompe
+  // il runtime la ripete fino in fondo, se fallisce l'etichetta viene tolta). Il giro non va toccato.
+  if (a) return { ...base(a.persona), seguito: false, applica: doppioni.length > 0, aggiungi: null, rinomina: false };
+  const p = prossimoDa(segnaposto);
+  return { ...base(p), seguito: false, applica: true, aggiungi: ids[nomeEtichetta(p)] ?? null, rinomina: true };
+}
+
+/** Errore dovuto alla dimensione della mail (non a limiti di frequenza o disservizi). */
+export function erroreDiDimensione(errore: string | null | undefined): boolean {
+  const e = String(errore ?? "");
+  return /size|too large|too big|\b413\b|\b552\b|25 ?mb/i.test(e) && !/rate/i.test(e);
+}
+
+/** Secondi in più (0-4) per sfasare le attese di esecuzioni partite insieme; stabile per la stessa mail. */
+export function sfasamento(messageId: string, giro: number): number {
+  let h = 0;
+  for (const c of messageId) h = (h * 31 + c.charCodeAt(0)) % 9973;
+  return (h + giro) % 5;
 }
 
 /** Il collega riceve già la mail direttamente (in A o Cc): inoltrarla sarebbe un doppione. */
@@ -136,7 +184,7 @@ export function nota(p: Persona, cliente: string, seguito: boolean, senzaAllegat
       : `Turno: ${p.nome}. Questa conversazione di support@migelino.ch è assegnata a te.`,
     `Rispondendo a questa mail scrivi direttamente a ${cliente}.`,
   ];
-  if (senzaAllegati) righe.push("Gli allegati non si sono potuti inoltrare (troppo grandi): aprili nella conversazione in support@migelino.ch.");
+  if (senzaAllegati) righe.push("Allegati non inclusi (troppo grandi per l'inoltro): aprili nella conversazione in support@migelino.ch.");
   righe.push(`Rif. turno ${messageId}`);
   return righe.join("\n");
 }

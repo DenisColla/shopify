@@ -33,12 +33,13 @@ test('Etichetta "➜ prossimo" cambiata a mano: vale il nome scritto, se non si 
   assert.equal(t.etichettaDelProssimo(ETICHETTE), null);
 });
 
-test('Conversazione già assegnata: il messaggio stesso (esecuzione ripetuta) o un altro messaggio (seguito)', () => {
+test('Conversazione già assegnata: un altro messaggio (seguito) o solo il messaggio stesso (esecuzione ripetuta)', () => {
   const msg = (id, ...labelIds) => ({ id, labelIds });
   assert.equal(t.assegnazioneEsistente([msg('a', 'INBOX', 'UNREAD')], 'a', ID), null);
   assert.deepEqual(t.assegnazioneEsistente([msg('a', 'L3'), msg('b', 'INBOX')], 'b', ID), { persona: t.SQUADRA[2], seguito: true });
   assert.deepEqual(t.assegnazioneEsistente([msg('a', 'INBOX', 'L1')], 'a', ID), { persona: t.SQUADRA[0], seguito: false });
-  assert.deepEqual(t.assegnazioneEsistente([msg('a', 'L2'), msg('b', 'L2', 'INBOX')], 'b', ID), { persona: t.SQUADRA[1], seguito: false });
+  assert.deepEqual(t.assegnazioneEsistente([msg('a', 'L2'), msg('b', 'L2', 'INBOX')], 'b', ID), { persona: t.SQUADRA[1], seguito: true },
+    'seguito rieseguito: resta un seguito');
   assert.equal(t.assegnazioneEsistente([msg('a', 'SENT'), { id: 'b', labelIds: null }], 'b', ID), null);
 });
 
@@ -65,6 +66,38 @@ test('Indirizzi, nomi e nota', () => {
   assert.equal(t.nomeMittente('', 'm@example.com'), 'm@example.com via Support');
   assert.equal(t.nomeMittente('Mario "Il" <Rossi>', 'm@example.com'), 'Mario Il Rossi via Support');
   const n = t.nota(t.SQUADRA[1], 'm@example.com', false, true, '1a2b3c');
-  assert.match(n, /^Turno: Marco[\s\S]*direttamente a m@example\.com[\s\S]*allegati non si sono potuti inoltrare[\s\S]*Rif\. turno 1a2b3c$/);
+  assert.match(n, /^Turno: Marco[\s\S]*direttamente a m@example\.com[\s\S]*Allegati non inclusi \(troppo grandi[\s\S]*Rif\. turno 1a2b3c$/);
   assert.match(t.nota(t.SQUADRA[2], 'm@example.com', true, false, 'x'), /già assegnata a te/);
+});
+
+test('Scelta sotto blocco: conversazione nuova, seguito, esecuzione ripetuta (mai il giro)', () => {
+  const msg = (id, ...labelIds) => ({ id, labelIds });
+  const elenco = (prossimo, ...altri) => [...ETICHETTE, ...(prossimo ? [{ id: 'P', name: prossimo }] : []), ...altri];
+  // nuova, prima volta in assoluto
+  let s = t.scegli([msg('a', 'INBOX')], 'a', ID, elenco(null));
+  assert.deepEqual(s, { nome: 'Denis', idProssimo: null, nuovoNome: 'Turno/➜ prossimo: Marco', doppioni: [], seguito: false, applica: true, aggiungi: 'L1', rinomina: true });
+  // nuova, giro su Silvia
+  s = t.scegli([msg('a', 'INBOX')], 'a', ID, elenco('Turno/➜ prossimo: Silvia'));
+  assert.equal(s.nome, 'Silvia'); assert.equal(s.aggiungi, 'L3'); assert.equal(s.nuovoNome, 'Turno/➜ prossimo: Denis'); assert.equal(s.idProssimo, 'P');
+  // seguito: nessuna scrittura
+  s = t.scegli([msg('a', 'L2'), msg('b', 'INBOX')], 'b', ID, elenco('Turno/➜ prossimo: Silvia'));
+  assert.equal(s.seguito, true); assert.equal(s.applica, false); assert.equal(s.nome, 'Marco');
+  // esecuzione ripetuta di una mail già assegnata: il giro non si tocca, anche se dopo un giro completo è di nuovo sul suo nome
+  for (const giro of ['Turno/➜ prossimo: Marco', 'Turno/➜ prossimo: Silvia']) {
+    s = t.scegli([msg('a', 'L2')], 'a', ID, elenco(giro));
+    assert.equal(s.nome, 'Marco'); assert.equal(s.applica, false); assert.equal(s.rinomina, false); assert.equal(s.aggiungi, null);
+  }
+  // "➜ prossimo" doppie: le altre da togliere
+  s = t.scegli([msg('a')], 'a', ID, elenco('Turno/➜ prossimo: Marco', { id: 'P2', name: 'turno/➜ prossimo: Silvia' }));
+  assert.deepEqual(s.doppioni, ['P2']); assert.equal(s.nome, 'Marco');
+});
+
+test('Errore di dimensione distinto dai limiti di frequenza; sfasamento stabile', () => {
+  assert.equal(t.erroreDiDimensione('Message too large (exceeds 25MB)'), true);
+  assert.equal(t.erroreDiDimensione('552 5.3.4 Message size exceeds fixed limit'), true);
+  assert.equal(t.erroreDiDimensione('User-rate limit exceeded'), false);
+  assert.equal(t.erroreDiDimensione('Rate limit: request size quota'), false);
+  assert.equal(t.erroreDiDimensione(null), false);
+  assert.equal(t.sfasamento('1a2b', 3), t.sfasamento('1a2b', 3));
+  for (let i = 0; i < 10; i++) assert.ok(t.sfasamento('abc' + i, i) >= 0 && t.sfasamento('abc' + i, i) <= 4);
 });

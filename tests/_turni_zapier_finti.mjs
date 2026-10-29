@@ -5,7 +5,10 @@ import { register } from 'node:module';
 const stub = (codice) => 'data:text/javascript,' + encodeURIComponent(codice);
 const MODULI = {
   '@zapier/zapier-durable': stub('export const defineDurable = (nome, run) => ({ nome, run });'),
-  '@zapier/zapier-sdk': stub('export const createZapierSdk = () => ({ fetch: (...a) => globalThis.__turni.fetch(...a), runAction: (...a) => globalThis.__turni.runAction(...a) });'),
+  '@zapier/zapier-sdk': stub(`export const createZapierSdk = () => ({
+    fetch: (...a) => globalThis.__turni.fetch(...a),
+    createActionRun: (...a) => globalThis.__turni.createActionRun(...a),
+    getActionRun: (...a) => globalThis.__turni.getActionRun(...a) });`),
   // zod minimo: lo schema accetta tutto (qui si prova il flusso, non la validazione).
   zod: stub(`const s = () => { const o = { parse: (v) => v }; for (const k of ['loose','nullable','optional']) o[k] = () => o; return o; };
     export const z = { object: s, string: s, array: s, boolean: s, unknown: s };`),
@@ -16,22 +19,29 @@ register(stub(caricatore));
 
 const pausa = () => new Promise((r) => setImmediate(r));
 
-/** Gmail in memoria con le sole API usate dal workflow. */
+/** Gmail in memoria con le sole API usate dal workflow, più le esecuzioni d'azione di Zapier. */
 export class GmailFinta {
   constructor() {
     this.etichette = [{ id: 'INBOX', name: 'INBOX' }, { id: 'SENT', name: 'SENT' }, { id: 'UNREAD', name: 'UNREAD' }];
     this.messaggi = [];
     this.inoltri = [];
+    this.run = new Map();
     this.n = 0;
-    this.fallisce = null; // (inputs) => true per simulare un errore dell'inoltro
+    // esitoInoltro(inputs) => 'ok' | 'attesa' | 'sconosciuto' | { errore } | { eccezione }
+    this.esitoInoltro = () => 'ok';
+    this.guasti = { bloccoCreatoMaRisposta502: 0, patch500: 0, deleteBlocco503: 0, ricerca503: 0, thread503: 0 };
   }
-  arriva(id, threadId, da, { cc = [] } = {}) {
+  arriva(id, threadId, da, { cc = [], allegati = 0 } = {}) {
     this.messaggi.push({ id, threadId, labelIds: ['INBOX', 'UNREAD'], testo: '', ordine: this.n++ });
     return { id, message_id: id, thread_id: threadId, subject: 'Oggetto ' + id, from: { name: 'Cliente ' + id, email: da },
-      reply_to: { name: '', email: '' }, to: { emails: ['support@migelino.ch'] }, cc: { emails: cc }, labels: ['UNREAD', 'INBOX'] };
+      reply_to: { name: '', email: '' }, to: { emails: ['support@migelino.ch'] }, cc: { emails: cc }, labels: ['UNREAD', 'INBOX'],
+      attachment_count: allegati };
   }
+  id(nome) { return this.etichette.find((l) => l.name === nome)?.id; }
   nomeDi(id) { return this.etichette.find((l) => l.id === id)?.name; }
   etichetteDi(id) { return this.messaggi.find((m) => m.id === id).labelIds.map((l) => this.nomeDi(l)).filter((n) => n && n.startsWith('Turno')); }
+  prossimo() { return this.etichette.filter((l) => l.name.startsWith('Turno/➜')).map((l) => l.name); }
+  blocchi() { return this.etichette.filter((l) => l.name.startsWith('Turno/🔒')); }
   esiste(nome, tranne) { return this.etichette.some((l) => l.id !== tranne && l.name.toLowerCase() === nome.toLowerCase()); }
 
   async fetch(url, opzioni = {}) {
@@ -47,10 +57,18 @@ export class GmailFinta {
       if (this.esiste(corpo.name)) return r(409, { error: 'Label name exists or conflicts' });
       const l = { id: 'Label_' + this.n++, name: corpo.name };
       this.etichette.push(l);
+      if (corpo.name.startsWith('Turno/🔒') && this.guasti.bloccoCreatoMaRisposta502 > 0) {
+        this.guasti.bloccoCreatoMaRisposta502--;
+        return r(502, { error: 'Bad gateway' }); // creata davvero, ma la risposta si perde
+      }
       return r(200, l);
     }
     if ((m = /^\/labels\/([^/]+)$/.exec(p))) {
       const l = this.etichette.find((x) => x.id === m[1]);
+      if (metodo === 'DELETE' && l && l.name.startsWith('Turno/🔒') && this.guasti.deleteBlocco503 > 0) {
+        this.guasti.deleteBlocco503--;
+        return r(503, { error: 'unavailable' });
+      }
       if (!l) return r(404, { error: 'not found' });
       if (metodo === 'DELETE') {
         this.etichette = this.etichette.filter((x) => x !== l);
@@ -58,6 +76,7 @@ export class GmailFinta {
         return r(204);
       }
       if (metodo === 'PATCH') {
+        if (this.guasti.patch500 > 0) { this.guasti.patch500--; return r(500, { error: 'backend' }); }
         if (this.esiste(corpo.name, l.id)) return r(409, { error: 'conflict' });
         l.name = corpo.name;
         return r(200, l);
@@ -65,6 +84,7 @@ export class GmailFinta {
       return r(200, l);
     }
     if ((m = /^\/threads\/([^/]+)$/.exec(p))) {
+      if (this.guasti.thread503 > 0) { this.guasti.thread503--; return r(503, { error: 'unavailable' }); }
       const lista = this.messaggi.filter((x) => x.threadId === m[1]).sort((a, b) => a.ordine - b.ordine);
       return lista.length ? r(200, { messages: lista.map((x) => ({ id: x.id, labelIds: [...x.labelIds] })) }) : r(404, {});
     }
@@ -81,6 +101,7 @@ export class GmailFinta {
       return x ? r(200, { id: x.id, labelIds: [...x.labelIds] }) : r(404, {});
     }
     if (p === '/messages' && metodo === 'GET') {
+      if (this.guasti.ricerca503 > 0) { this.guasti.ricerca503--; return r(503, { error: 'unavailable' }); }
       const cerca = /^in:sent "(.+)"$/.exec(u.searchParams.get('q'))[1];
       const trovati = this.messaggi.filter((x) => x.labelIds.includes('SENT') && x.testo.includes(cerca));
       return r(200, trovati.length ? { messages: [{ id: trovati[0].id }] } : { resultSizeEstimate: 0 });
@@ -88,34 +109,57 @@ export class GmailFinta {
     throw new Error(`API Gmail non prevista nel test: ${metodo} ${p}`);
   }
 
-  async runAction({ actionKey, inputs }) {
+  async createActionRun({ action, inputs }) {
     await pausa();
-    if (actionKey !== 'forward_email') throw new Error('azione non prevista: ' + actionKey);
-    if (this.fallisce && this.fallisce(inputs)) throw new Error('Gmail: inoltro rifiutato');
+    if (action !== 'forward_email') throw new Error('azione non prevista: ' + action);
+    const esito = this.esitoInoltro(inputs);
+    if (esito?.eccezione) throw new Error(esito.eccezione);
+    const id = 'run' + this.n++;
+    this.run.set(id, { inputs, esito });
+    if (esito === 'ok') this.invia(inputs);
+    return { data: { id, implementation_id: 'GoogleMailV2CLIAPI@2.14.0' } };
+  }
+
+  async getActionRun({ run }) {
+    await pausa();
+    const { esito } = this.run.get(run);
+    if (esito === 'attesa') return { data: { id: run, status: 'waiting', results: [], errors: [] } };
+    if (esito === 'sconosciuto') return { data: { id: run, status: 'unknown', results: [], errors: [] } };
+    if (esito?.errore) return { data: { id: run, status: 'error', results: [], errors: [{ code: 'x', title: 'Errore', detail: esito.errore }] } };
+    return { data: { id: run, status: 'success', results: [{ id: 'fwd' }], errors: [] } };
+  }
+
+  invia(inputs) {
     const originale = this.messaggi.find((x) => x.id === inputs.message_id);
-    const id = 'fwd' + this.n++;
-    this.messaggi.push({ id, threadId: originale.threadId, labelIds: ['SENT'], testo: inputs.additional_message, ordine: this.n++ });
+    this.messaggi.push({ id: 'fwd' + this.n++, threadId: 'f' + this.n, labelIds: ['SENT'], testo: inputs.additional_message, ordine: this.n++ });
     this.inoltri.push({ id: inputs.message_id, a: inputs.to[0], allegati: inputs.include_attachments, nota: inputs.additional_message,
-      replyTo: inputs.reply_to, nome: inputs.from_name });
-    return { data: [{ id, threadId: originale.threadId, labelIds: ['SENT'] }] };
+      replyTo: inputs.reply_to, nome: inputs.from_name, thread: originale.threadId });
   }
 }
 
-/** Contesto durevole finto: passi memorizzati per nome con nuovi tentativi, attese che lasciano girare le altre esecuzioni. */
-export function contesto() {
+/**
+ * Contesto durevole finto: passi memorizzati per nome con i tentativi del runtime reale (5 se non indicati),
+ * attese che lasciano girare le altre esecuzioni. "sezione" conta quante esecuzioni sono tra scegli-turno
+ * e rilascia-blocco nello stesso momento (deve restare 1).
+ */
+export function contesto(sezione = { dentro: 0, massimo: 0 }) {
   const passi = new Map();
   const ctx = {
     nomi: [],
     attese: 0,
     async step(a, b) {
-      const { name, run, maxAttempts = 1 } = typeof a === 'string' ? { name: a, run: b } : a;
+      const { name, run, maxAttempts = 5 } = typeof a === 'string' ? { name: a, run: b } : a;
       if (passi.has(name)) throw new Error('passo ripetuto con lo stesso nome: ' + name);
       ctx.nomi.push(name);
+      if (name === 'scegli-turno') { sezione.dentro++; sezione.massimo = Math.max(sezione.massimo, sezione.dentro); }
+      if (name === 'rilascia-blocco') sezione.dentro--;
       let errore;
       for (let i = 0; i < maxAttempts; i++) {
-        try { const v = await run(); passi.set(name, v); return v; } catch (e) { errore = e; }
+        try { const v = await run(); passi.set(name, v); return v; } catch (e) { errore = e; await pausa(); }
       }
-      throw errore;
+      const esaurito = new Error(`Step "${name}" exhausted`);
+      esaurito.cause = errore;
+      throw esaurito;
     },
     async wait(nome) { ctx.attese++; ctx.nomi.push(nome); for (let i = 0; i < 20; i++) await pausa(); },
   };
